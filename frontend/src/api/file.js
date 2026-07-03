@@ -1,0 +1,11 @@
+import api from './index'
+export { uploadFile } from './chat'
+
+export function fetchFiles(keyword = '') {
+  return api
+    .get('/api/files', {
+      params: { keyword: keyword || undefined },
+      timeout: 10000,
+    })
+    .then((res) => res.data)
+}

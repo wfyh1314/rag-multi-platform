@@ -9,3 +9,7 @@ export function fetchFiles(keyword = '') {
     })
     .then((res) => res.data)
 }
+
+export function deleteFile(fileId) {
+  return api.delete(`/api/files/${fileId}`).then((res) => res.data)
+}

@@ -11,6 +11,7 @@ const {
   uploadStatus,
   loadFiles,
   handleUpload,
+  handleDelete,
   formatTime,
 } = useFileList()
 
@@ -86,6 +87,17 @@ function statusTagType(status) {
           </template>
         </el-table-column>
         <el-table-column prop="file_id" label="文件 ID" min-width="200" show-overflow-tooltip />
+        <el-table-column label="操作" width="100" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              type="danger"
+              link
+              @click="handleDelete(row.file_id, row.filename)"
+            >
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </div>
   </div>

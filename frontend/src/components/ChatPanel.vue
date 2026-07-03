@@ -78,8 +78,8 @@ watch(() => props.messages, scrollToBottom, { deep: true })
       </div>
 
       <div
-        v-for="(msg, index) in messages"
-        :key="index"
+        v-for="msg in messages"
+        :key="msg.id"
         class="message"
         :class="msg.role"
       >

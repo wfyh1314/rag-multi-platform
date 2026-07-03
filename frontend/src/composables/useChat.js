@@ -3,6 +3,26 @@ import { fetchModels, fetchCollections, uploadFile, clearHistory, streamChat } f
 
 const STORAGE_KEY = 'rag_sessions'
 
+function createMessage(role, content = '') {
+  return {
+    id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    role,
+    content,
+  }
+}
+
+function ensureMessageIds(sessions) {
+  for (const session of sessions) {
+    if (!Array.isArray(session.messages)) continue
+    for (const msg of session.messages) {
+      if (!msg.id) {
+        msg.id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      }
+    }
+  }
+  return sessions
+}
+
 function createSession(title = '新对话') {
   return {
     id: `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -18,7 +38,10 @@ function loadSessions() {
     if (raw) {
       const data = JSON.parse(raw)
       if (Array.isArray(data.sessions) && data.sessions.length) {
-        return { sessions: data.sessions, activeId: data.activeId || data.sessions[0].id }
+        return {
+          sessions: ensureMessageIds(data.sessions),
+          activeId: data.activeId || data.sessions[0].id,
+        }
       }
     }
   } catch {
@@ -123,14 +146,35 @@ export function useChat() {
     const question = text.trim()
     if (!question || isStreaming.value || !activeSession.value) return
 
-    activeSession.value.messages.push({ role: 'user', content: question })
-    updateSessionTitle(activeSession.value.id, question)
+    const sessionId = activeSessionId.value
+    const session = sessions.value.find((s) => s.id === sessionId)
+    if (!session) return
 
-    const assistantMsg = { role: 'assistant', content: '' }
-    activeSession.value.messages.push(assistantMsg)
+    session.messages.push(createMessage('user', question))
+    updateSessionTitle(sessionId, question)
+
+    session.messages.push(createMessage('assistant', ''))
+    const assistantIndex = session.messages.length - 1
     isStreaming.value = true
 
-    const history = activeSession.value.messages
+    function getAssistantMessage() {
+      const target = sessions.value.find((s) => s.id === sessionId)
+      if (!target) return null
+      const msg = target.messages[assistantIndex]
+      return msg?.role === 'assistant' ? msg : null
+    }
+
+    function appendAssistantChunk(chunk) {
+      const msg = getAssistantMessage()
+      if (msg) msg.content += chunk
+    }
+
+    function setAssistantContent(content) {
+      const msg = getAssistantMessage()
+      if (msg) msg.content = content
+    }
+
+    const history = session.messages
       .slice(0, -2)
       .filter((m) => m.content)
       .map((m) => ({ role: m.role, content: m.content }))
@@ -144,21 +188,19 @@ export function useChat() {
           model: selectedModel.value,
           max_length: maxLength.value,
           temperature: temperature.value,
-          session_id: activeSessionId.value,
+          session_id: sessionId,
         },
-        (chunk) => {
-          assistantMsg.content += chunk
-        },
+        appendAssistantChunk,
         () => {
           isStreaming.value = false
         },
         (error) => {
-          assistantMsg.content = `错误: ${error}`
+          setAssistantContent(`错误: ${error}`)
           isStreaming.value = false
         },
       )
     } catch (err) {
-      assistantMsg.content = `错误: ${err.message}`
+      setAssistantContent(`错误: ${err.message}`)
       isStreaming.value = false
     }
   }

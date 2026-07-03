@@ -1,5 +1,6 @@
 import { ref, watch, onMounted } from 'vue'
-import { fetchFiles, uploadFile } from '@/api/file'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { fetchFiles, uploadFile, deleteFile } from '@/api/file'
 
 function debounce(fn, delay) {
   let timer = null
@@ -55,6 +56,38 @@ export function useFileList() {
     }
   }
 
+  async function handleDelete(fileId, filename) {
+    if (!fileId) return
+    try {
+      await ElMessageBox.confirm(
+        `确定删除「${filename}」？将同时删除本地文件与向量索引，且不可恢复。`,
+        '删除确认',
+        {
+          type: 'warning',
+          confirmButtonText: '删除',
+          cancelButtonText: '取消',
+          confirmButtonClass: 'el-button--danger',
+        },
+      )
+    } catch {
+      return
+    }
+
+    loading.value = true
+    error.value = ''
+    try {
+      await deleteFile(fileId)
+      ElMessage.success('文件已删除')
+      await loadFiles()
+    } catch (err) {
+      const msg = err.message || '删除失败'
+      error.value = msg
+      ElMessage.error(msg)
+    } finally {
+      loading.value = false
+    }
+  }
+
   function formatTime(iso) {
     if (!iso) return '-'
     try {
@@ -77,6 +110,7 @@ export function useFileList() {
     uploadStatus,
     loadFiles,
     handleUpload,
+    handleDelete,
     formatTime,
   }
 }

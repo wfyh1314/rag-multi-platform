@@ -33,6 +33,14 @@ class FileStorage:
             return True
         return False
 
+    def delete_dir(self, subdir: str) -> bool:
+        """删除子目录及其全部内容。"""
+        target_dir = self.base_dir / subdir if subdir else self.base_dir
+        if not target_dir.exists():
+            return False
+        shutil.rmtree(target_dir)
+        return True
+
     def cleanup_expired(self, max_age_hours: int = 24) -> int:
         """删除超过 max_age_hours 的文件，返回删除数量。"""
         cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)

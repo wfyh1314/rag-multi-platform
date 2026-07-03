@@ -110,5 +110,7 @@ async def delete_file(
     file_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> MessageResponse:
-    """删除文件（占位）。"""
-    raise HTTPException(status_code=501, detail="文件删除接口待实现")
+    """删除文件及其向量索引。"""
+    tenant_id = current_user.get("tenant_id", "")
+    file_service.delete(file_id, tenant_id)
+    return MessageResponse(message="文件已删除")

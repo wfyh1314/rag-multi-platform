@@ -8,6 +8,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    FilterSelector,
     Fusion,
     FusionQuery,
     MatchValue,
@@ -168,6 +169,22 @@ class VectorStore:
             collection_name=self.collection_name,
             points_selector=[self._to_point_id(pid) for pid in point_ids],
         )
+
+    def delete_by_filter(self, filters: dict[str, Any]) -> None:
+        """按 payload 条件批量删除向量点。"""
+        if not filters:
+            return
+        collections = [c.name for c in self._client.get_collections().collections]
+        if self.collection_name not in collections:
+            return
+        self._client.delete(
+            collection_name=self.collection_name,
+            points_selector=FilterSelector(filter=self._build_filter(filters)),
+        )
+
+    def delete_by_file_id(self, file_id: str) -> None:
+        """删除指定文件的全部向量 chunk。"""
+        self.delete_by_filter({"file_id": file_id})
 
     def _query_to_results(
         self,

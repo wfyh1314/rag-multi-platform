@@ -7,10 +7,14 @@ from pathlib import Path
 from typing import Any, BinaryIO, Optional
 
 from config.constants import ALLOWED_EXTENSIONS, MAX_UPLOAD_SIZE_MB
-from core.exceptions import FileParseError, ValidationError
+from core.exceptions import AppError, FileParseError, ValidationError
+from core.logger import get_logger
 from core.utils import get_file_extension
 from document.pipeline import DocumentProcessor
 from file_mgr.file_storage import FileStorage
+from storage.vector_store import VectorStore
+
+logger = get_logger()
 
 # 按租户记录已上传文件（内存注册表，供前端知识库下拉使用）
 _upload_registry: dict[str, list[dict[str, Any]]] = {}
@@ -44,6 +48,22 @@ def get_file_id_by_filename(tenant_id: str, filename: str) -> str | None:
     return None
 
 
+def get_file_record(tenant_id: str, file_id: str) -> dict[str, Any] | None:
+    """按 file_id 查找上传记录。"""
+    for item in _upload_registry.get(tenant_id, []):
+        if item.get("file_id") == file_id:
+            return item
+    return None
+
+
+def _unregister_upload(tenant_id: str, file_id: str) -> bool:
+    """从注册表移除文件记录。"""
+    items = _upload_registry.get(tenant_id, [])
+    before = len(items)
+    _upload_registry[tenant_id] = [item for item in items if item.get("file_id") != file_id]
+    return len(_upload_registry[tenant_id]) < before
+
+
 def _register_upload(tenant_id: str, record: dict[str, Any]) -> None:
     """登记上传成功的文件，同名文件以最新记录为准。"""
     items = _upload_registry.setdefault(tenant_id, [])
@@ -58,9 +78,11 @@ class FileService:
         self,
         storage: Optional[FileStorage] = None,
         processor: Optional[DocumentProcessor] = None,
+        vector_store_cls: type[VectorStore] = VectorStore,
     ):
         self.storage = storage or FileStorage()
         self.processor = processor or DocumentProcessor()
+        self._vector_store_cls = vector_store_cls
 
     def upload(
         self,
@@ -134,8 +156,23 @@ class FileService:
         raise NotImplementedError
 
     def delete(self, file_id: str, tenant_id: str) -> bool:
-        """删除文件。"""
-        raise NotImplementedError
+        """删除文件：向量索引、本地磁盘、注册表记录。"""
+        record = get_file_record(tenant_id, file_id)
+        if not record:
+            raise AppError(
+                f"文件不存在: {file_id}",
+                code="FILE_NOT_FOUND",
+                status_code=404,
+            )
+
+        try:
+            self._vector_store_cls(tenant_id).delete_by_file_id(file_id)
+        except Exception as exc:
+            logger.warning("删除 Qdrant 向量失败 file_id=%s: %s", file_id, exc)
+
+        self.storage.delete_dir(f"{tenant_id}/{file_id}")
+        _unregister_upload(tenant_id, file_id)
+        return True
 
     def update_status(self, file_id: str, status: str, tenant_id: str) -> dict[str, Any]:
         """更新文件解析/索引状态。"""

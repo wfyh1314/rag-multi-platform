@@ -23,12 +23,15 @@ def test_list_models(client):
     response = client.get("/api/models")
     assert response.status_code == 200
     data = response.json()
-    assert "models" in data
-    assert len(data["models"]) >= 1
+    assert data["code"] == 10000
+    assert "models" in data["result"]
+    assert len(data["result"]["models"]) >= 1
 
 
 def test_clear_history(client):
     """清空历史接口应成功。"""
     response = client.post("/api/history/clear", json={"session_id": "test-session"})
     assert response.status_code == 200
-    assert "清空" in response.json()["message"]
+    data = response.json()
+    assert data["code"] == 10000
+    assert "清空" in data["message"]

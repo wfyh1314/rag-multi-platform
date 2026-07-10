@@ -14,12 +14,24 @@ _engine = None
 _SessionLocal = None
 
 
-def init_db(settings: Optional[Settings] = None) -> None:
+def init_db(settings: Optional[Settings] = None, database_url: Optional[str] = None) -> None:
     """初始化 SQLAlchemy 引擎与会话工厂。"""
     global _engine, _SessionLocal
     cfg = settings or get_settings()
-    _engine = create_engine(cfg.mysql_url, pool_pre_ping=True, echo=cfg.debug)
+    url = database_url or cfg.mysql_url
+    _engine = create_engine(url, pool_pre_ping=True, echo=cfg.debug)
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+
+
+def create_tables() -> None:
+    """创建所有 ORM 表（若不存在）。"""
+    global _engine
+    if _engine is None:
+        init_db()
+    # 导入模型以注册 metadata
+    import storage.models  # noqa: F401
+
+    Base.metadata.create_all(bind=_engine)
 
 
 @contextmanager

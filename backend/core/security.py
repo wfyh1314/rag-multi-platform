@@ -3,29 +3,39 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+import bcrypt
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+from starlette.middleware.base import BaseHTTPMiddleware
 
+from config.response_codes import UNAUTHORIZED
 from config.settings import Settings, get_settings
 from core.exceptions import AuthenticationError
+from core.request_context import get_request_uuid, set_request_uuid
+from core.response import fail
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security_scheme = HTTPBearer(auto_error=False)
 
-# 生产环境跳过鉴权的路径（健康检查、文档）
-PUBLIC_PATHS = frozenset({"/health", "/docs", "/openapi.json", "/redoc"})
+# 生产环境跳过鉴权的路径（健康检查、文档、登录）
+PUBLIC_PATHS = frozenset({
+    "/health",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/api/auth/login",
+})
 
 
 def hash_password(plain_password: str) -> str:
     """使用 bcrypt 哈希明文密码。"""
-    return pwd_context.hash(plain_password)
+    return bcrypt.hashpw(plain_password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """校验明文密码与哈希是否匹配。"""
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 
 def create_access_token(
@@ -50,6 +60,15 @@ def decode_access_token(token: str, settings: Optional[Settings] = None) -> dict
         return jwt.decode(token, cfg.jwt_secret_key, algorithms=[cfg.jwt_algorithm])
     except JWTError as exc:
         raise AuthenticationError("Token 无效或已过期") from exc
+
+
+def _resolve_request_uuid(request: Request) -> str:
+    """从 request.state 或上下文获取 UUID。"""
+    state_uuid = getattr(request.state, "uuid", "")
+    if state_uuid:
+        set_request_uuid(state_uuid)
+        return state_uuid
+    return get_request_uuid()
 
 
 async def get_current_user(
@@ -78,14 +97,36 @@ async def jwt_auth_middleware(request: Request, call_next):
     """JWT 鉴权中间件，保护需认证的路由。"""
     settings = get_settings()
     path = request.url.path
+    request_uuid = _resolve_request_uuid(request)
 
     if path in PUBLIC_PATHS or settings.auth_skip:
         return await call_next(request)
 
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="未授权访问")
+        return JSONResponse(
+            status_code=401,
+            content=fail(code=UNAUTHORIZED, message="未授权访问", request_uuid=request_uuid),
+        )
 
     token = auth_header.split(" ", 1)[1]
-    decode_access_token(token, settings)
+    try:
+        decode_access_token(token, settings)
+    except AuthenticationError as exc:
+        return JSONResponse(
+            status_code=401,
+            content=fail(
+                code=UNAUTHORIZED,
+                message=exc.message,
+                description=exc.description,
+                request_uuid=request_uuid,
+            ),
+        )
     return await call_next(request)
+
+
+class JwtAuthMiddleware(BaseHTTPMiddleware):
+    """JWT 鉴权中间件包装。"""
+
+    async def dispatch(self, request, call_next):
+        return await jwt_auth_middleware(request, call_next)

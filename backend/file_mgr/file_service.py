@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Optional
 
 from config.constants import ALLOWED_EXTENSIONS, MAX_UPLOAD_SIZE_MB
+from config.response_codes import INTERNAL_ERROR, NOT_FOUND
 from core.exceptions import AppError, FileParseError, ValidationError
 from core.logger import get_logger
 from core.utils import get_file_extension
@@ -107,7 +108,7 @@ class FileService:
         safe_name = Path(filename).name
         subdir = f"{tenant_id}/{file_id}"
         saved_path = self.storage.save(BytesIO(content), safe_name, subdir=subdir)
-
+        #  调用流水线
         try:
             result = self.processor.process(
                 file_path=saved_path,
@@ -161,7 +162,7 @@ class FileService:
         if not record:
             raise AppError(
                 f"文件不存在: {file_id}",
-                code="FILE_NOT_FOUND",
+                code=NOT_FOUND,
                 status_code=404,
             )
 

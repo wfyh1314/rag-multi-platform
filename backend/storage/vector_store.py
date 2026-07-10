@@ -26,6 +26,7 @@ from config.constants import (
     SPARSE_VECTOR_NAME,
 )
 from config.settings import Settings, get_settings
+from config.response_codes import BAD_REQUEST
 from core.exceptions import AppError
 
 
@@ -72,7 +73,7 @@ class VectorStore:
             raise AppError(
                 f"集合 {self.collection_name} 为旧版单向量 schema，"
                 f"请删除该 collection 后重新上传文档。",
-                code="QDRANT_SCHEMA_MISMATCH",
+                code=BAD_REQUEST,
                 status_code=409,
             )
 

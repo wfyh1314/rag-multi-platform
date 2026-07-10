@@ -1,4 +1,5 @@
-import api from './index'
+import api from '@/api/index'
+import { getAuthHeaders } from '@/utils/token'
 
 export function fetchModels() {
   return api.get('/api/models', { timeout: 10000 }).then((res) => {
@@ -41,7 +42,7 @@ export async function streamChat(params, onChunk, onDone, onError) {
 
   const response = await fetch(`${baseUrl}/api/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(body),
   })
 
@@ -49,7 +50,9 @@ export async function streamChat(params, onChunk, onDone, onError) {
     let message = `请求失败: ${response.status}`
     try {
       const errData = await response.json()
-      if (errData.message) {
+      if (typeof errData.code === 'number' && errData.code !== 10000) {
+        message = errData.message || errData.description || message
+      } else if (errData.message) {
         message = errData.message
       } else if (errData.detail) {
         message = Array.isArray(errData.detail)

@@ -1,6 +1,6 @@
 import { ref, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { fetchFiles, uploadFile, deleteFile } from '@/api/file'
+import { fetchFiles, uploadFile, deleteFile } from '@/views/file/api/file'
 
 function debounce(fn, delay) {
   let timer = null

@@ -1,5 +1,5 @@
 import { ref, computed, watch } from 'vue'
-import { fetchModels, fetchCollections, uploadFile, clearHistory, streamChat } from '@/api/chat'
+import { fetchModels, fetchCollections, uploadFile, clearHistory, streamChat } from '@/views/chat/api/chat'
 
 const STORAGE_KEY = 'rag_sessions'
 

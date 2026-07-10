@@ -11,6 +11,16 @@ npm run dev
 
 开发服务器运行在 http://localhost:5000，API 请求通过 Vite 代理转发到后端 `http://127.0.0.1:8000`。
 
+## 目录结构
+
+前端按业务模块组织：
+
+- `src/views/login/` — 登录页与 auth API
+- `src/views/chat/` — 对话页、组件、composables、chat API
+- `src/views/file/` — 文件管理页、composables、file API
+- `src/composables/useAuth.js` — 全局认证（AppNav 使用）
+- `src/api/index.js` — 全局 axios 实例
+
 ## 生产部署
 
 ```bash

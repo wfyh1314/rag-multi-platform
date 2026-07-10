@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { useFileList } from '@/composables/useFileList'
+import { useFileList } from '@/views/file/composables/useFileList'
 
 const {
   files,

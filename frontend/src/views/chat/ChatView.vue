@@ -1,9 +1,9 @@
 <script setup>
 import { onMounted } from 'vue'
-import SessionSidebar from '@/components/SessionSidebar.vue'
-import ChatPanel from '@/components/ChatPanel.vue'
-import ConfigSidebar from '@/components/ConfigSidebar.vue'
-import { useChat } from '@/composables/useChat'
+import SessionSidebar from '@/views/chat/components/SessionSidebar.vue'
+import ChatPanel from '@/views/chat/components/ChatPanel.vue'
+import ConfigSidebar from '@/views/chat/components/ConfigSidebar.vue'
+import { useChat } from '@/views/chat/composables/useChat'
 
 const {
   sessions,

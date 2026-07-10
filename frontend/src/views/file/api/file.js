@@ -1,5 +1,5 @@
-import api from './index'
-export { uploadFile } from './chat'
+import api from '@/api/index'
+export { uploadFile } from '@/views/chat/api/chat'
 
 export function fetchFiles(keyword = '') {
   return api

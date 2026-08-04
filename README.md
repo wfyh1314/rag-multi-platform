@@ -15,7 +15,7 @@
 - **标签系统**：标签字典、关键词自动打标、手动打标、文件列表标签列、RAG 按标签筛选
 - 标签同步至 Qdrant chunk payload（`tag_ids`）
 - 私有/公共/部门知识库权限控制
-- 选中知识库或标签时的 RAG 流式问答（SSE）
+- 选中知识库或标签时的 RAG 流式问答（SSE）；默认未选知识库时自动检索全部可访问文档
 - **后端会话持久化**（MySQL `chat_sessions` / `chat_messages`）
 - 文件夹管理、文件预览、用户注册、操作/问答审计
 - **Celery 异步解析**大文件（超过阈值自动入队）
@@ -103,7 +103,7 @@ npm run dev
 
 **文档入库：** 上传 → 本地磁盘 + MySQL → 解析/分块 → Embedding + 稀疏向量 → Qdrant → 自动打标 → 同步 `tag_ids` 到 Qdrant
 
-**RAG 问答：** 提问（可选 `collection` + `tag_ids`）→ 混合检索 → Rerank → Prompt 注入 → SSE 流式回答 → 消息落库
+**RAG 问答：** 提问（可选 `collection` + `tag_ids`；未选 collection 时默认检索全部可访问知识库）→ 混合检索 → Rerank → Prompt 注入 → SSE 流式回答 → 消息落库
 
 **会话：** 前端调用 Session API → MySQL 持久化；旧版 localStorage 数据可通过 `/api/sessions/import` 一次性迁移
 
@@ -156,18 +156,37 @@ pytest tests/ -v
 **Rollup 原生模块缺失（Windows）**  
 删除 `frontend/node_modules` 与 `package-lock.json` 后重新 `npm install`；Node 升级到 18.20+ 或 20 LTS。
 
-**MySQL 旧库缺列**  
-重启后端触发 `ensure_schema()`；或使用 `alembic upgrade head` 执行迁移。库名使用 `rag_multi_platform`。
+**MySQL 旧库缺列 / 多租户残留字段**  
+若报错 `Field 'tenant_id' doesn't have a default value` 或 `Unknown column`，说明库表结构与当前版本不一致。
+
+1. **推荐**：重启后端，启动时会执行 `ensure_schema()` 与 `migrate_legacy_tenant_schema()`（自动移除旧 `tenant_id` 等字段）
+2. **或手动迁移**：
+
+```bash
+cd backend
+alembic upgrade head   # 当前 head 含 003_drop_tenant_id
+```
+
+仍使用旧库名 `rag_multi_tenant` 亦可，迁移完成后可继续使用；新部署建议库名 `rag_multi_platform`。
 
 **数据库迁移（Alembic）**
+
+| Revision | 说明 |
+|----------|------|
+| `001_baseline` | 基线标记 |
+| `002_department` | users/files 增加 `department_id` |
+| `003_drop_tenant_id` | 移除旧多租户 `tenant_id` 列，修正唯一键 |
 
 ```bash
 cd backend
 pip install alembic   # 已含于 requirements.txt
-alembic upgrade head  # 应用 002_department 等迁移
+alembic upgrade head
 ```
 
 已有通过 `create_all()` 建库的部署，可先 `alembic stamp 001_baseline` 再 `alembic upgrade head`。
+
+**API 返回数据库错误（code: 10502）**  
+数据库连接失败或表结构不匹配时，接口返回 HTTP 503 及业务码 `10502`（`DATABASE_ERROR`），`message` 中会提示检查连接或执行迁移；完整异常栈仍写入后端日志。
 
 ## License
 

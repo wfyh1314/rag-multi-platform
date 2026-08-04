@@ -8,9 +8,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import SQLAlchemyError
 
 from api import audit_router, chat_router, file_router, tag_router, user_router
+from config.response_codes import INTERNAL_ERROR
 from config.settings import get_settings
+from core.db_errors import map_db_exception
 from core.exceptions import AppError
 from core.logger import setup_logger
 from core.rate_limit import RateLimitMiddleware
@@ -119,6 +122,39 @@ async def validation_exception_handler(
             message=message or "参数校验失败",
             description="参数校验失败",
             result=errors,
+            request_uuid=request_uuid,
+        ),
+    )
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    """处理 SQLAlchemy 数据库异常，返回业务错误码而非裸 500。"""
+    logger.exception("Database error on %s %s", request.method, request.url.path)
+    request_uuid = getattr(request.state, "uuid", "") or ""
+    status_code, business_code, message = map_db_exception(exc)
+    return JSONResponse(
+        status_code=status_code,
+        content=fail(
+            code=business_code,
+            message=message,
+            description="数据库错误",
+            request_uuid=request_uuid,
+        ),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """兜底：未捕获异常记录日志并返回统一业务错误码。"""
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    request_uuid = getattr(request.state, "uuid", "") or ""
+    return JSONResponse(
+        status_code=500,
+        content=fail(
+            code=INTERNAL_ERROR,
+            message="服务器内部错误，请稍后重试",
+            description="内部错误",
             request_uuid=request_uuid,
         ),
     )

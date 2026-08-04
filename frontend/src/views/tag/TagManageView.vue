@@ -17,11 +17,6 @@ const tagOptions = computed(() => {
     }))
   )
 })
-
-async function refreshAll() {
-  await dictionaryRef.value?.loadCategories?.()
-  await documentRef.value?.loadFiles?.()
-}
 </script>
 
 <template>
@@ -36,10 +31,6 @@ async function refreshAll() {
     <div class="tag-manage-layout">
       <TagDictionaryPanel ref="dictionaryRef" />
       <DocumentTagsPanel ref="documentRef" :tag-options="tagOptions" />
-    </div>
-
-    <div class="tag-manage-footer">
-      <el-button @click="refreshAll">刷新全部</el-button>
     </div>
   </div>
 </template>

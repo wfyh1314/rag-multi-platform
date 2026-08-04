@@ -11,8 +11,7 @@ class MockEmbedding:
 
 
 class MockVectorStore:
-    def __init__(self, tenant_id: str, settings=None):
-        self.tenant_id = tenant_id
+    def __init__(self, settings=None):
         self.last_hybrid_args: dict | None = None
 
     def hybrid_search(self, dense_vector, sparse_vector, top_k, filters=None, prefetch_limit=20):
@@ -34,8 +33,8 @@ class MockVectorStore:
 
 
 def test_hybrid_search_calls_vector_store(monkeypatch):
-    store = MockVectorStore("tenant-1")
-    search = HybridSearch("tenant-1", vector_store=store)
+    store = MockVectorStore()
+    search = HybridSearch(vector_store=store)
     search._embedding = MockEmbedding()
 
     results = search.search("测试问题", top_k=5, filters={"file_id": "f1"})

@@ -6,7 +6,13 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, BinaryIO, Optional
 
-from config.constants import ALLOWED_EXTENSIONS, DOC_VISIBILITY_PRIVATE, DOC_VISIBILITY_PUBLIC, MAX_UPLOAD_SIZE_MB
+from config.constants import (
+    ALLOWED_EXTENSIONS,
+    DOC_VISIBILITY_DEPARTMENT,
+    DOC_VISIBILITY_PRIVATE,
+    DOC_VISIBILITY_PUBLIC,
+    MAX_UPLOAD_SIZE_MB,
+)
 from config.response_codes import NOT_FOUND
 from core.doc_permission import DocPermissionService
 from core.exceptions import AppError, FileParseError, ValidationError
@@ -17,6 +23,7 @@ from document.pipeline import DocumentProcessor
 from file_mgr.file_storage import FileStorage
 from storage.mysql_db import get_db_session
 from storage.repositories.file_repository import FileRepository
+from storage.repositories.user_repository import UserRepository
 from storage.vector_store import VectorStore
 
 logger = get_logger()
@@ -25,28 +32,45 @@ _doc_permission = DocPermissionService()
 
 def _normalize_visibility(visibility: str | None) -> str:
     value = (visibility or DOC_VISIBILITY_PRIVATE).strip().lower()
-    if value not in {DOC_VISIBILITY_PRIVATE, DOC_VISIBILITY_PUBLIC}:
+    if value not in {DOC_VISIBILITY_PRIVATE, DOC_VISIBILITY_PUBLIC, DOC_VISIBILITY_DEPARTMENT}:
         raise ValidationError(f"不支持的可见性: {visibility}")
     return value
+
+
+def _resolve_file_department(visibility: str, owner_department_id: str | None) -> str | None:
+    if visibility != DOC_VISIBILITY_DEPARTMENT:
+        return None
+    if not owner_department_id:
+        raise ValidationError("当前用户未设置部门，无法上传部门可见文档")
+    return owner_department_id
+
+
+def _get_user_department_id(user_id: str) -> str | None:
+    with get_db_session() as session:
+        user = UserRepository(session).get_by_id(user_id)
+        return user.department_id if user else None
 
 
 def list_files_for_user(
     user_id: str,
     keyword: str | None = None,
     folder_id: str | None = None,
+    department_id: str | None = None,
 ) -> dict[str, Any]:
     """返回当前用户可访问的文件列表。"""
+    dept = department_id if department_id is not None else _get_user_department_id(user_id)
     with get_db_session() as session:
         repo = FileRepository(session)
         items = [
             FileRepository.to_dict(record)
-            for record in repo.list_accessible(user_id, keyword, folder_id=folder_id)
+            for record in repo.list_accessible(user_id, keyword, folder_id=folder_id, department_id=dept)
         ]
     return {"files": items, "total": len(items)}
 
 
-def list_collections_for_user(user_id: str) -> dict[str, list]:
+def list_collections_for_user(user_id: str, department_id: str | None = None) -> dict[str, list]:
     """返回当前用户可选知识库列表。"""
+    dept = department_id if department_id is not None else _get_user_department_id(user_id)
     with get_db_session() as session:
         repo = FileRepository(session)
         collections = [
@@ -55,7 +79,7 @@ def list_collections_for_user(user_id: str) -> dict[str, list]:
                 "filename": record.filename,
                 "visibility": record.visibility,
             }
-            for record in repo.list_accessible(user_id)
+            for record in repo.list_accessible(user_id, department_id=dept)
         ]
     return {"collections": collections, "pending": []}
 
@@ -110,6 +134,7 @@ class FileService:
         user_id: str,
         visibility: str = DOC_VISIBILITY_PRIVATE,
         folder_id: Optional[str] = None,
+        department_id: Optional[str] = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """上传文件，同步执行解析、清洗、分块、向量化与入库。"""
@@ -118,6 +143,7 @@ class FileService:
             raise ValidationError(f"不支持的文件格式: {ext}")
 
         visibility = _normalize_visibility(visibility)
+        file_department_id = _resolve_file_department(visibility, department_id)
         content = file.read()
         max_bytes = MAX_UPLOAD_SIZE_MB * 1024 * 1024
         if len(content) > max_bytes:
@@ -149,6 +175,7 @@ class FileService:
                     storage_path=saved_path,
                     folder_id=folder_id,
                     visibility=visibility,
+                    department_id=file_department_id,
                     chunk_count=0,
                     status="pending",
                     message="等待异步解析",
@@ -194,6 +221,7 @@ class FileService:
                 storage_path=saved_path,
                 folder_id=folder_id,
                 visibility=visibility,
+                department_id=file_department_id,
                 chunk_count=result["chunk_count"],
                 status=result["status"],
                 message=result["message"],

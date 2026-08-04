@@ -1,4 +1,4 @@
-"""基础稠密向量检索（Qdrant 租户隔离空间）."""
+"""基础稠密向量检索（Qdrant 全局 collection）."""
 
 from typing import Any, Optional
 
@@ -10,9 +10,8 @@ from storage.vector_store import VectorStore
 class BaseRetriever:
     """基于 Qdrant 的稠密向量检索器。"""
 
-    def __init__(self, tenant_id: str, vector_store: Optional[VectorStore] = None):
-        self.tenant_id = tenant_id
-        self._vector_store = vector_store or VectorStore(tenant_id, get_settings())
+    def __init__(self, vector_store: Optional[VectorStore] = None):
+        self._vector_store = vector_store or VectorStore(get_settings())
         self._embedding = get_embedding()
 
     def search(

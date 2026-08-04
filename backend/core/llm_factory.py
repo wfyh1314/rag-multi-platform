@@ -7,6 +7,7 @@ from typing import Any, Optional, Protocol
 import httpx
 
 from config.settings import Settings, get_settings
+from config.response_codes import INTERNAL_ERROR
 from core.exceptions import AppError
 
 
@@ -43,7 +44,7 @@ class DashScopeEmbeddingClient:
         if not self.api_key:
             raise AppError(
                 "未配置 DASHSCOPE_API_KEY，无法向量化",
-                code="EMBEDDING_NOT_CONFIGURED",
+                code=INTERNAL_ERROR,
                 status_code=503,
             )
 
@@ -79,6 +80,58 @@ class DashScopeEmbeddingClient:
         return self._request([text])[0]
 
 
+class DashScopeRerankClient:
+    """DashScope 文本 Rerank 客户端（gte-rerank-v2）."""
+
+    def __init__(self, settings: Settings):
+        self.api_url = settings.rerank_api_url
+        self.api_key = settings.effective_rerank_api_key
+        self.model = settings.rerank_model
+
+        if not self.api_key:
+            raise AppError(
+                "未配置 DASHSCOPE_API_KEY，无法调用 Rerank",
+                code=INTERNAL_ERROR,
+                status_code=503,
+            )
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def rerank(self, query: str, documents: list[str], top_n: int = 5) -> list[dict[str, Any]]:
+        if not documents:
+            return []
+
+        payload = {
+            "model": self.model,
+            "input": {
+                "query": query,
+                "documents": documents,
+            },
+            "parameters": {
+                "top_n": min(top_n, len(documents)),
+                "return_documents": False,
+            },
+        }
+
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(self.api_url, json=payload, headers=self._headers())
+            response.raise_for_status()
+            data = response.json()
+
+        results = data.get("output", {}).get("results", [])
+        return [
+            {
+                "index": item["index"],
+                "relevance_score": item.get("relevance_score", 0.0),
+            }
+            for item in results
+        ]
+
+
 class DashScopeLLMClient:
     """DashScope OpenAI 兼容 Chat Completions 客户端."""
 
@@ -92,7 +145,7 @@ class DashScopeLLMClient:
         if not self.api_key:
             raise AppError(
                 "未配置 DASHSCOPE_API_KEY，无法调用 LLM",
-                code="LLM_NOT_CONFIGURED",
+                code=INTERNAL_ERROR,
                 status_code=503,
             )
 
@@ -145,13 +198,6 @@ class DashScopeLLMClient:
                         continue
 
 
-class _PlaceholderRerank:
-    """Rerank 占位客户端（脚手架）。"""
-
-    def rerank(self, query: str, documents: list[str], top_n: int = 5) -> list[dict[str, Any]]:
-        raise NotImplementedError("Rerank client not configured")
-
-
 _llm_instance: Optional[Any] = None
 _embedding_instance: Optional[Any] = None
 _rerank_instance: Optional[Any] = None
@@ -175,9 +221,10 @@ def get_embedding(settings: Optional[Settings] = None) -> DashScopeEmbeddingClie
     return _embedding_instance
 
 
-def get_reranker(settings: Optional[Settings] = None) -> Any:
-    """返回 Rerank 单例客户端。"""
+def get_reranker(settings: Optional[Settings] = None) -> DashScopeRerankClient:
+    """返回 DashScope Rerank 单例客户端。"""
     global _rerank_instance
     if _rerank_instance is None:
-        _rerank_instance = _PlaceholderRerank()
+        cfg = settings or get_settings()
+        _rerank_instance = DashScopeRerankClient(cfg)
     return _rerank_instance

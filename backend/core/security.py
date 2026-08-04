@@ -11,6 +11,7 @@ from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from config.response_codes import UNAUTHORIZED
+from config.constants import ROLE_SUPER_ADMIN
 from config.settings import Settings, get_settings
 from core.exceptions import AuthenticationError
 from core.request_context import get_request_uuid, set_request_uuid
@@ -25,6 +26,7 @@ PUBLIC_PATHS = frozenset({
     "/openapi.json",
     "/redoc",
     "/api/auth/login",
+    "/api/auth/register",
 })
 
 
@@ -77,7 +79,7 @@ async def get_current_user(
 ) -> dict[str, Any]:
     """FastAPI 依赖：从 JWT 提取当前用户。"""
     if settings.auth_skip:
-        return {"user_id": "dev-user", "tenant_id": "dev-tenant", "role": "tenant_admin"}
+        return {"user_id": "dev-user", "role": ROLE_SUPER_ADMIN, "department_id": "default"}
 
     if credentials is None:
         raise HTTPException(
@@ -88,8 +90,8 @@ async def get_current_user(
     payload = decode_access_token(credentials.credentials, settings)
     return {
         "user_id": payload.get("sub"),
-        "tenant_id": payload.get("tenant_id"),
         "role": payload.get("role"),
+        "department_id": payload.get("department_id"),
     }
 
 

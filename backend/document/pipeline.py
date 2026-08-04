@@ -35,9 +35,10 @@ class DocumentProcessor:
     def process(
         self,
         file_path: str,
-        tenant_id: str,
         file_id: str,
         user_id: str,
+        visibility: str,
+        tag_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """执行完整流水线：加载 → 清洗 → 分块 → 向量化 → 入库。"""
         # 1. 加载
@@ -50,9 +51,10 @@ class DocumentProcessor:
         # 3. 分块
         split_chunks = split_document(
             cleaned,
-            strategy="fixed",
+            strategy=self.settings.chunk_strategy,
             chunk_size=self.settings.chunk_size,
             overlap=self.settings.chunk_overlap,
+            breakpoint_threshold=self.settings.semantic_chunk_breakpoint_threshold,
         )
 
         if not split_chunks:
@@ -66,9 +68,16 @@ class DocumentProcessor:
         # 附加租户/文件元数据
         for i, chunk in enumerate(split_chunks):
             chunk["chunk_index"] = i
-            chunk["tenant_id"] = tenant_id
             chunk["file_id"] = file_id
             chunk["user_id"] = user_id
+            chunk["owner_id"] = user_id
+            chunk["visibility"] = visibility
+            file_type = chunk.get("file_type", "")
+            chunk["modality"] = "image" if file_type == "image" else "text"
+            if chunk.get("source"):
+                chunk["media_path"] = chunk.get("source")
+            if tag_ids:
+                chunk["tag_ids"] = tag_ids
 
         # 4. 向量化（稠密 + 稀疏）
         texts = [c["content"] for c in split_chunks]
@@ -76,7 +85,7 @@ class DocumentProcessor:
         sparse_vectors = self._sparse_encoder.encode_batch(texts)
 
         # 5. 写入 Qdrant
-        vector_store = self._vector_store_cls(tenant_id, self.settings)
+        vector_store = self._vector_store_cls(self.settings)
         vector_size = len(dense_vectors[0]) if dense_vectors else self.settings.embedding_dimension
         vector_store.ensure_collection(vector_size)
 

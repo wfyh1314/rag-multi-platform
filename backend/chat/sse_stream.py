@@ -1,4 +1,4 @@
-"""SSE 流式问答输出封装."""
+"""组装 LLM 消息 → 流式调用大模型 → 把结果格式化成 SSE 事件字符串，供 chat_api.py 的 StreamingResponse 推送给前端"""
 
 import asyncio
 import json
@@ -6,7 +6,6 @@ import queue
 import threading
 from typing import Any, AsyncGenerator, Optional
 
-from chat.rag_service import build_rag_context
 from core.llm_factory import get_llm
 
 
@@ -14,7 +13,7 @@ def format_sse_event(data: dict[str, Any]) -> str:
     """将字典格式化为 SSE data 行。"""
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-
+# 构建无RAG时的messages列表
 def _build_messages(
     query: str,
     history: Optional[list[dict[str, str]]] = None,
@@ -28,10 +27,10 @@ def _build_messages(
             content = item.get("content", "")
             if content:
                 messages.append({"role": role, "content": content})
-    messages.append({"role": "user", "content": query})
+    messages.append({"role": "user", "content": query}) # 添加用户当前问题
     return messages
 
-
+# 构建有RAG时的messages列表
 def _build_rag_messages(
     query: str,
     rag_context: str,
@@ -65,9 +64,9 @@ async def _stream_messages(
     **llm_kwargs: Any,
 ) -> AsyncGenerator[str, None]:
     """通用 LLM 流式 SSE 输出。"""
-    llm = get_llm()
-    chunk_queue: queue.Queue = queue.Queue()
-    errors: list[Exception] = []
+    llm = get_llm() # 获取大模型实例
+    chunk_queue: queue.Queue = queue.Queue() # 创建一个队列，用于存放大模型返回的流式内容
+    errors: list[Exception] = [] # 创建一个列表，用于存放大模型返回的错误   
 
     def _producer() -> None:
         try:
@@ -78,7 +77,7 @@ async def _stream_messages(
         finally:
             chunk_queue.put(None)
 
-    threading.Thread(target=_producer, daemon=True).start()
+    threading.Thread(target=_producer, daemon=True).start() # 启动一个线程，用于调用大模型
 
     try:
         while True:
@@ -94,7 +93,7 @@ async def _stream_messages(
     except Exception as exc:
         yield format_sse_event({"error": str(exc)})
 
-
+# 用户未选知识库时调用
 async def stream_llm_answer(
     query: str,
     history: Optional[list[dict[str, str]]] = None,
@@ -105,19 +104,45 @@ async def stream_llm_answer(
     async for event in _stream_messages(messages, **llm_kwargs):
         yield event
 
-
 async def stream_rag_answer(
     query: str,
-    tenant_id: str,
-    collection: Optional[str] = None,
+    user: dict[str, Any],
+    file_id: Optional[str] = None,
+    tag_ids: Optional[list[str]] = None,
     history: Optional[list[dict[str, str]]] = None,
     **llm_kwargs: Any,
 ) -> AsyncGenerator[str, None]:
     """混合检索后流式 RAG 问答。"""
-    rag_context, _ = build_rag_context(tenant_id, query, collection=collection)
+    from chat.rag_service import build_rag_context, hits_to_sources
+
+    rag_context, hits = build_rag_context(user, query, file_id=file_id, tag_ids=tag_ids)
     messages = _build_rag_messages(query, rag_context, history)
+    sources = hits_to_sources(hits)
     async for event in _stream_messages(messages, **llm_kwargs):
         yield event
+    if sources:
+        yield format_sse_event({"sources": sources})
+
+
+async def stream_agent_answer(
+    query: str,
+    user: dict[str, Any],
+    file_id: Optional[str] = None,
+    tag_ids: Optional[list[str]] = None,
+    history: Optional[list[dict[str, str]]] = None,
+    **llm_kwargs: Any,
+) -> AsyncGenerator[str, None]:
+    """LangGraph Agent 检索 + 流式生成（复用主 RAG 多模态检索链）。"""
+    from chat.rag_service import format_rag_context, hits_to_sources, search_rag_hits
+
+    hits = search_rag_hits(user, query, file_id or None, tag_ids or None)
+    sources = hits_to_sources(hits)
+    context = format_rag_context(hits)
+    messages = _build_rag_messages(query, context, history)
+    async for event in _stream_messages(messages, **llm_kwargs):
+        yield event
+    if sources:
+        yield format_sse_event({"sources": sources})
 
 
 async def stream_error(error: str) -> AsyncGenerator[str, None]:

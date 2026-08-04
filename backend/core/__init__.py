@@ -4,7 +4,6 @@ from core.exceptions import (
     AppError,
     FileParseError,
     PermissionDeniedError,
-    TenantNotFoundError,
 )
 from core.logger import get_logger, setup_logger
 
@@ -12,7 +11,6 @@ __all__ = [
     "AppError",
     "FileParseError",
     "PermissionDeniedError",
-    "TenantNotFoundError",
     "get_logger",
     "setup_logger",
 ]

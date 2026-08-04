@@ -5,8 +5,14 @@ from typing import Iterable, Optional, Tuple
 from core.utils import filter_sensitive_words
 
 
-# 默认敏感词列表（占位）
-DEFAULT_SENSITIVE_WORDS: list[str] = []
+# 默认敏感词列表（演示用，生产环境建议接入外部词库或管理后台）
+DEFAULT_SENSITIVE_WORDS: list[str] = [
+    "违禁内容",
+    "暴力袭击",
+    "诈骗电话",
+    "非法赌博",
+    "色情低俗",
+]
 
 
 class ContentRiskService:

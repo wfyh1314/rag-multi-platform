@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     )
 
     # 应用
-    app_name: str = "enterprise_multi_tenant_rag"
+    app_name: str = "enterprise_rag"
     app_env: str = "development"
     debug: bool = True
     host: str = "0.0.0.0"
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     mysql_port: int = 3306
     mysql_user: str = "rag_user"
     mysql_password: str = "rag_password"
-    mysql_database: str = "rag_multi_tenant"
+    mysql_database: str = "rag_multi_platform"
     mysql_charset: str = "utf8mb4"
 
     # Redis 缓存
@@ -51,7 +51,10 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_api_key: Optional[str] = None
-    qdrant_collection_prefix: str = "tenant_"
+    qdrant_collection_name: str = Field(
+        default="knowledge_base",
+        validation_alias=AliasChoices("QDRANT_COLLECTION_NAME", "QDRANT_COLLECTION_PREFIX"),
+    )
 
     # Celery 异步任务
     celery_broker_url: str = "redis://localhost:6379/1"
@@ -79,9 +82,15 @@ class Settings(BaseSettings):
     )
     embedding_dimension: int = 1536
 
-    # Rerank（预留）
-    rerank_api_base: Optional[str] = None
-    rerank_api_key: Optional[str] = None
+    # Rerank（DashScope gte-rerank-v2）
+    rerank_api_base: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("RERANK_API_BASE"),
+    )
+    rerank_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("RERANK_API_KEY"),
+    )
     rerank_model: str = Field(
         default="gte-rerank-v2",
         validation_alias=AliasChoices("RERANK_MODEL"),
@@ -90,6 +99,9 @@ class Settings(BaseSettings):
     # 文档分块
     chunk_size: int = 1000
     chunk_overlap: int = 150
+    chunk_strategy: str = Field(default="fixed", description="fixed | semantic")
+    semantic_chunk_breakpoint_threshold: float = Field(default=0.5)
+    async_upload_threshold_mb: int = Field(default=5)
 
     # 文件存储
     upload_dir: str = "tmp/uploads"
@@ -107,6 +119,10 @@ class Settings(BaseSettings):
         self.llm_model = self.llm_model.strip().strip('"').strip("'")
         self.embedding_model = self.embedding_model.strip().strip('"').strip("'")
         self.rerank_model = self.rerank_model.strip().strip('"').strip("'")
+        if self.rerank_api_key:
+            self.rerank_api_key = self.rerank_api_key.strip().strip('"').strip("'")
+        if self.rerank_api_base:
+            self.rerank_api_base = self.rerank_api_base.strip().strip('"').strip("'")
         return self
 
     @property
@@ -123,6 +139,18 @@ class Settings(BaseSettings):
 
     @property
     def embedding_api_key(self) -> str:
+        return self.dashscope_api_key
+
+    @property
+    def rerank_api_url(self) -> str:
+        if self.rerank_api_base:
+            return self.rerank_api_base.rstrip("/")
+        return "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank"
+
+    @property
+    def effective_rerank_api_key(self) -> str:
+        if self.rerank_api_key:
+            return self.rerank_api_key
         return self.dashscope_api_key
 
     @property

@@ -7,7 +7,7 @@ from config.settings import get_settings
 settings = get_settings()
 
 celery_app = Celery(
-    "enterprise_multi_tenant_rag",
+    settings.app_name,
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
     include=["tasks.parse_file_task"],

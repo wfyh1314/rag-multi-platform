@@ -3,6 +3,7 @@
 import pytest
 from qdrant_client.models import SparseVector
 
+from config.constants import DOC_VISIBILITY_PRIVATE
 from document.pipeline import DocumentProcessor
 
 
@@ -14,8 +15,7 @@ class MockEmbedding:
 class MockVectorStore:
     instances: list["MockVectorStore"] = []
 
-    def __init__(self, tenant_id: str, settings=None):
-        self.tenant_id = tenant_id
+    def __init__(self, settings=None):
         self.upserted: list[dict] = []
         MockVectorStore.instances.append(self)
 
@@ -43,9 +43,9 @@ def test_pipeline_full_flow(tmp_path, mock_pipeline):
 
     result = mock_pipeline.process(
         file_path=str(file_path),
-        tenant_id="tenant-1",
         file_id="file-abc",
         user_id="user-1",
+        visibility=DOC_VISIBILITY_PRIVATE,
     )
 
     assert result["status"] == "indexed"
@@ -57,6 +57,7 @@ def test_pipeline_full_flow(tmp_path, mock_pipeline):
     assert store.upserted[0]["content"]
     assert len(store.upserted[0]["dense_vector"]) == 3
     assert isinstance(store.upserted[0]["sparse_vector"], SparseVector)
+    assert store.upserted[0]["metadata"]["visibility"] == DOC_VISIBILITY_PRIVATE
 
 
 def test_pipeline_empty_content(tmp_path, mock_pipeline):
@@ -67,7 +68,7 @@ def test_pipeline_empty_content(tmp_path, mock_pipeline):
     with pytest.raises(Exception):
         mock_pipeline.process(
             file_path=str(file_path),
-            tenant_id="tenant-1",
             file_id="file-empty",
             user_id="user-1",
+            visibility=DOC_VISIBILITY_PRIVATE,
         )

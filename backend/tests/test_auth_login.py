@@ -13,9 +13,8 @@ from core.security import hash_password
 from main import app
 import storage.mysql_db as mysql_db
 from storage.mysql_db import create_tables, get_db_session
-from storage.repositories.tenant_repository import TenantRepository
 from storage.repositories.user_repository import UserRepository
-from tenant.user_service import UserService
+from user.user_service import UserService
 
 
 @pytest.fixture
@@ -24,7 +23,6 @@ def sqlite_auth_db(monkeypatch):
     get_settings.cache_clear()
     monkeypatch.setenv("AUTH_SKIP", "false")
     monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-for-auth")
-    monkeypatch.setenv("DEFAULT_TENANT_ID", "default")
 
     engine = create_engine(
         "sqlite://",
@@ -36,14 +34,11 @@ def sqlite_auth_db(monkeypatch):
     create_tables()
 
     with get_db_session() as session:
-        tenant_repo = TenantRepository(session)
         user_repo = UserRepository(session)
-        tenant_repo.create(id="default", name="默认租户", status="active")
         user_repo.create(
             id="user-admin-001",
             username="admin",
             password_hash=hash_password("admin@123"),
-            tenant_id="default",
             role=ROLE_SUPER_ADMIN,
             real_name="系统管理员",
             phone="13800000000",
@@ -59,7 +54,7 @@ def sqlite_auth_db(monkeypatch):
 
 def test_login_success(sqlite_auth_db):
     service = UserService()
-    profile = service.login("admin", "admin@123", "default")
+    profile = service.login("admin", "admin@123")
     assert profile["username"] == "admin"
     assert profile["real_name"] == "系统管理员"
     assert profile["phone"] == "13800000000"
@@ -70,26 +65,20 @@ def test_login_success(sqlite_auth_db):
 def test_login_wrong_password(sqlite_auth_db):
     service = UserService()
     with pytest.raises(AuthenticationError):
-        service.login("admin", "wrong-password", "default")
+        service.login("admin", "wrong-password")
 
 
 def test_login_unknown_user(sqlite_auth_db):
     service = UserService()
     with pytest.raises(AuthenticationError):
-        service.login("nobody", "admin@123", "default")
-
-
-def test_login_wrong_tenant(sqlite_auth_db):
-    service = UserService()
-    with pytest.raises(AuthenticationError):
-        service.login("admin", "admin@123", "other-tenant")
+        service.login("nobody", "admin@123")
 
 
 def test_login_api_returns_token_and_user(sqlite_auth_db):
     client = TestClient(app)
     response = client.post(
         "/api/auth/login",
-        json={"username": "admin", "password": "admin@123", "tenant_id": "default"},
+        json={"username": "admin", "password": "admin@123"},
     )
     assert response.status_code == 200
     data = response.json()
@@ -106,7 +95,7 @@ def test_users_me_with_token(sqlite_auth_db):
     client = TestClient(app)
     login_resp = client.post(
         "/api/auth/login",
-        json={"username": "admin", "password": "admin@123", "tenant_id": "default"},
+        json={"username": "admin", "password": "admin@123"},
     )
     token = login_resp.json()["result"]["access_token"]
 

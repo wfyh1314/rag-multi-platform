@@ -1,13 +1,18 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ChatDotRound, CollectionTag, Upload, Document, User } from '@element-plus/icons-vue'
+import { ChatDotRound, CollectionTag, Upload, Document } from '@element-plus/icons-vue'
 import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
 const { user, logout, initAuth } = useAuth()
 
-const displayName = computed(() => user.value?.real_name || user.value?.username || '用户')
+const roleLabel = computed(() => {
+  const role = user.value?.role
+  if (role === 'super_admin') return '系统管理员'
+  if (role === 'admin') return '管理员'
+  return user.value?.real_name || user.value?.username || '用户'
+})
 
 onMounted(() => {
   initAuth()
@@ -18,7 +23,10 @@ onMounted(() => {
   <aside class="app-sidebar">
     <div class="app-sidebar-brand">
       <div class="app-sidebar-logo">RAG</div>
-      <span class="app-sidebar-title">通用 RAG 知识库</span>
+      <div class="app-sidebar-brand-text">
+        <span class="app-sidebar-title">企业级知识库问答平台</span>
+        <span class="app-sidebar-badge">AI生成</span>
+      </div>
     </div>
 
     <nav class="app-sidebar-nav">
@@ -64,11 +72,8 @@ onMounted(() => {
     </nav>
 
     <div class="app-sidebar-footer">
-      <router-link to="/profile" class="app-sidebar-profile-link">
-        <el-icon><User /></el-icon>
-        <span>{{ displayName }}</span>
-      </router-link>
-      <el-button link type="primary" @click="logout">退出登录</el-button>
+      <span class="app-sidebar-role">{{ roleLabel }}</span>
+      <button type="button" class="app-sidebar-logout" @click="logout">退出登录</button>
     </div>
   </aside>
 </template>

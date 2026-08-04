@@ -47,7 +47,7 @@ async function handleSubmit() {
 <template>
   <div class="login-page">
     <div class="login-card">
-      <h1 class="login-title">创建账号</h1>
+      <h1 class="login-title">企业级知识库问答平台</h1>
       <p class="login-subtitle">注册后可使用知识库问答平台</p>
 
       <el-form label-position="top" @submit.prevent="handleSubmit">

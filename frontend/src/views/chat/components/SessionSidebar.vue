@@ -1,4 +1,6 @@
 <script setup>
+import { Box, Delete } from '@element-plus/icons-vue'
+
 defineProps({
   sessions: { type: Array, required: true },
   activeSessionId: { type: String, required: true },
@@ -20,14 +22,14 @@ const emit = defineEmits([
       <h2>通用 RAG 助手</h2>
     </div>
 
-    <button class="btn btn-primary btn-full" @click="emit('new-session')">
-      + 新建对话
+    <button class="btn btn-gradient btn-full" @click="emit('new-session')">
+      + 新增对话
     </button>
 
     <div class="session-toolbar">
-      <el-button link size="small" @click="emit('toggle-archived')">
+      <button type="button" class="session-archive-link" @click="emit('toggle-archived')">
         {{ showArchived ? '隐藏归档' : '显示归档' }}
-      </el-button>
+      </button>
     </div>
 
     <div class="session-section">
@@ -49,18 +51,20 @@ const emit = defineEmits([
           </button>
           <button
             v-if="!showArchived"
-            class="btn btn-icon"
+            type="button"
+            class="session-action-btn"
             title="归档对话"
             @click.stop="emit('archive-session', session.id)"
           >
-            📦
+            <el-icon><Box /></el-icon>
           </button>
           <button
-            class="btn btn-icon"
+            type="button"
+            class="session-action-btn"
             title="删除对话"
             @click.stop="emit('delete-session', session.id)"
           >
-            ×
+            <el-icon><Delete /></el-icon>
           </button>
         </div>
       </div>

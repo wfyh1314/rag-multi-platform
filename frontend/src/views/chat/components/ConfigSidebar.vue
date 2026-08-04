@@ -25,6 +25,19 @@ const emit = defineEmits([
   'clear',
 ])
 
+const maxLengthOptions = [
+  { value: 512, label: '512' },
+  { value: 1024, label: '1024' },
+  { value: 2048, label: '2048' },
+  { value: 4096, label: '4096' },
+  { value: 8000, label: '8000' },
+]
+
+const chatModeOptions = [
+  { value: 'stream', label: '流式 RAG（SSE）' },
+  { value: 'agent', label: 'Agent（LangGraph 流式）' },
+]
+
 const flatTags = computed(() => {
   const items = []
   for (const cat of props.tagCategories) {
@@ -38,18 +51,36 @@ const flatTags = computed(() => {
   return items
 })
 
-function formatCollectionLabel(item) {
-  const normalized = normalizeCollection(item)
-  let scope = '私有'
-  if (normalized.visibility === 'public') scope = '公共'
-  else if (normalized.visibility === 'department') scope = '部门'
-  return `${normalized.filename}（${scope}）`
-}
+const collectionOptions = computed(() => {
+  const items = props.collections.map((item) => {
+    const normalized = normalizeCollection(item)
+    let scope = '私有'
+    if (normalized.visibility === 'public') scope = '公共'
+    else if (normalized.visibility === 'department') scope = '部门'
+    return {
+      value: normalized.file_id,
+      label: `${normalized.filename}（${scope}）`,
+    }
+  })
+  return [{ value: '', label: '不使用知识库' }, ...items]
+})
 
-function onTagChange(event) {
-  const values = Array.from(event.target.selectedOptions).map((opt) => opt.value)
-  emit('update:selectedTagIds', values)
-}
+const permissionScopeText = computed(() => {
+  if (!props.selectedCollection) {
+    return '未选择知识库，将使用全库可访问文档或纯 LLM 模式'
+  }
+  const item = props.collections.find(
+    (c) => normalizeCollection(c).file_id === props.selectedCollection,
+  )
+  if (!item) return '所选知识库不可用或索引中'
+  const visibility = normalizeCollection(item).visibility || 'private'
+  const map = {
+    private: '私有 — 仅上传者可检索',
+    department: '部门 — 同部门成员可检索',
+    public: '公共 — 全员可检索',
+  }
+  return map[visibility] || visibility
+})
 </script>
 
 <template>
@@ -59,123 +90,124 @@ function onTagChange(event) {
     </div>
 
     <div class="info-content">
-      <div class="info-section">
-        <h3>问答模式</h3>
-        <select
-          class="select-box select-full"
-          :value="chatMode"
-          @change="emit('update:chatMode', $event.target.value)"
-        >
-          <option value="stream">流式 RAG（SSE）</option>
-          <option value="agent">Agent（LangGraph 流式）</option>
-        </select>
-        <p class="tag-filter-hint">Agent 模式流式返回答案与引用来源</p>
-      </div>
+      <section class="panel-card config-panel-card">
+        <h3 class="config-panel-title">模型设置</h3>
+        <div class="config-field">
+          <label class="config-field-label">问答模式</label>
+          <el-select
+            :model-value="chatMode"
+            placeholder="选择模式"
+            @update:model-value="emit('update:chatMode', $event)"
+          >
+            <el-option
+              v-for="opt in chatModeOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </div>
+        <div class="config-field">
+          <label class="config-field-label">LLM 模型</label>
+          <el-select
+            :model-value="selectedModel"
+            placeholder="选择模型"
+            @update:model-value="emit('update:selectedModel', $event)"
+          >
+            <el-option
+              v-for="model in models"
+              :key="model.id"
+              :label="model.name"
+              :value="model.id"
+            />
+          </el-select>
+        </div>
+        <div class="config-field">
+          <label class="config-field-label">最大输出长度</label>
+          <el-select
+            :model-value="maxLength"
+            @update:model-value="emit('update:maxLength', Number($event))"
+          >
+            <el-option
+              v-for="opt in maxLengthOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </div>
+      </section>
 
-      <div class="info-section">
-        <h3>LLM Model</h3>
-        <select
-          class="select-box select-full"
-          :value="selectedModel"
-          @change="emit('update:selectedModel', $event.target.value)"
-        >
-          <option v-for="model in models" :key="model.id" :value="model.id">
-            {{ model.name }}
-          </option>
-        </select>
-      </div>
-
-      <div class="info-section">
-        <h3>模型回复最大长度</h3>
-        <div class="slider-row">
-          <input
-            type="range"
-            min="256"
-            max="8000"
-            step="256"
-            :value="maxLength"
-            @input="emit('update:maxLength', Number($event.target.value))"
-          />
-          <input
-            type="number"
-            class="slider-input"
-            min="256"
-            max="8000"
-            step="256"
-            :value="maxLength"
-            @change="emit('update:maxLength', Number($event.target.value))"
+      <section class="panel-card config-panel-card">
+        <h3 class="config-panel-title">生成参数</h3>
+        <div class="config-field">
+          <label class="config-field-label">温度：{{ temperature }}</label>
+          <el-slider
+            :model-value="temperature"
+            :min="0"
+            :max="2"
+            :step="0.1"
+            @update:model-value="emit('update:temperature', $event)"
           />
         </div>
-      </div>
+        <div class="config-field">
+          <label class="config-field-label">标签筛选</label>
+          <el-select
+            :model-value="selectedTagIds"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="不选则不过滤"
+            @update:model-value="emit('update:selectedTagIds', $event)"
+          >
+            <el-option
+              v-for="tag in flatTags"
+              :key="tag.id"
+              :label="tag.label"
+              :value="tag.id"
+            />
+          </el-select>
+        </div>
+      </section>
 
-      <div class="info-section">
-        <h3>温度</h3>
-        <div class="slider-row">
-          <input
-            type="range"
-            min="0"
-            max="2"
-            step="0.1"
-            :value="temperature"
-            @input="emit('update:temperature', Number($event.target.value))"
-          />
-          <input
-            type="number"
-            class="slider-input"
-            min="0"
-            max="2"
-            step="0.1"
-            :value="temperature"
-            @change="emit('update:temperature', Number($event.target.value))"
+      <section class="panel-card config-panel-card">
+        <h3 class="config-panel-title">检索设置</h3>
+        <div class="config-field">
+          <label class="config-field-label">知识库</label>
+          <el-select
+            :model-value="selectedCollection"
+            placeholder="选择知识库"
+            @update:model-value="emit('update:selectedCollection', $event)"
+          >
+            <el-option
+              v-for="opt in collectionOptions"
+              :key="opt.value || 'none'"
+              :label="opt.label"
+              :value="opt.value"
+            />
+            <el-option
+              v-for="name in pendingCollections"
+              :key="'pending-' + name"
+              :label="`${name}（索引中...）`"
+              :value="name"
+              disabled
+            />
+          </el-select>
+        </div>
+        <div class="config-field">
+          <label class="config-field-label">权限范围配置</label>
+          <el-input
+            :model-value="permissionScopeText"
+            type="textarea"
+            :rows="2"
+            readonly
+            resize="none"
           />
         </div>
-      </div>
+      </section>
 
-      <button class="btn btn-secondary btn-full clear-btn" @click="emit('clear')">
-        清除
-      </button>
-
-      <hr class="divider" />
-
-      <div class="info-section">
-        <h3>知识库</h3>
-        <select
-          class="select-box select-full"
-          :value="selectedCollection"
-          @change="emit('update:selectedCollection', $event.target.value)"
-        >
-          <option value="">不使用知识库</option>
-          <option
-            v-for="item in collections"
-            :key="item.file_id"
-            :value="item.file_id"
-          >
-            {{ formatCollectionLabel(item) }}
-          </option>
-          <option
-            v-for="name in pendingCollections"
-            :key="'pending-' + name"
-            :value="name"
-            disabled
-          >
-            {{ name }}（索引中...）
-          </option>
-        </select>
-      </div>
-
-      <div class="info-section">
-        <h3>标签筛选</h3>
-        <select
-          class="select-box select-full tag-filter-select"
-          multiple
-          :value="selectedTagIds"
-          @change="onTagChange($event)"
-        >
-          <option v-for="tag in flatTags" :key="tag.id" :value="tag.id">
-            {{ tag.label }}
-          </option>
-        </select>
-        <p class="tag-filter-hint">按住 Ctrl 多选；不选则不过滤标签</p>
+      <div class="config-clear-link">
+        <el-button link type="primary" @click="emit('clear')">清空当前会话</el-button>
       </div>
     </div>
   </aside>

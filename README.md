@@ -1,6 +1,6 @@
-# 多租户 RAG 知识库问答平台
+# 企业级知识库问答平台
 
-企业级多租户 RAG（检索增强生成）全栈项目：支持文档上传、解析向量化、Qdrant 混合检索、SSE 流式问答与文件管理。
+企业级 RAG（检索增强生成）全栈项目：支持文档上传、解析向量化、Qdrant 混合检索、标签管理、SSE 流式问答、后端会话持久化与文件管理。
 
 ## 项目简介
 
@@ -8,101 +8,78 @@
 
 **已实现能力：**
 
-- 多格式文档上传（PDF / Word / TXT / MD / CSV 等）与同步解析入库
-- 文档流水线：加载 → 清洗 → 分块 → 通义 Embedding 稠密向量化 + jieba 稀疏向量
-- Qdrant 混合检索（dense + sparse，RRF 融合）
-- 选中知识库时的 RAG 流式问答（SSE）
-- 文件管理：列表、搜索、上传、删除（含本地文件与向量索引清理）
-- 开发模式 JWT 免鉴权（`AUTH_SKIP=true`）
-
-**规划中 / 占位：** MySQL 持久化、会话 API、Celery 异步解析、Rerank、LangGraph Agent 等。
+- 多格式文档上传（PDF / Word / TXT / MD / CSV / 图片等）与同步/异步解析入库
+- 文档流水线：加载 → 清洗 → 固定/语义分块 → 通义 Embedding 稠密向量化 + jieba 稀疏向量
+- Qdrant 混合检索（dense + sparse，RRF 融合），单 collection `knowledge_base`
+- **gte-rerank-v2 重排序**精筛检索结果
+- **标签系统**：标签字典、关键词自动打标、手动打标、文件列表标签列、RAG 按标签筛选
+- 标签同步至 Qdrant chunk payload（`tag_ids`）
+- 私有/公共/部门知识库权限控制
+- 选中知识库或标签时的 RAG 流式问答（SSE）
+- **后端会话持久化**（MySQL `chat_sessions` / `chat_messages`）
+- 文件夹管理、文件预览、用户注册、操作/问答审计
+- **Celery 异步解析**大文件（超过阈值自动入队）
+- **LangGraph Agent** 问答（`POST /api/chat/agent`、流式 `POST /api/chat/agent/stream`）
+- 多模态检索（文本 + 图片 chunk）
+- 文件夹树管理、文件预览、会话归档
+- 用户注册 / 个人资料、操作/问答审计前端
+- API 限流（Redis，不可用时自动跳过）
+- **Alembic** 数据库迁移（`alembic upgrade head`）
+- 输入敏感词过滤（默认词库，问答/Agent 入口拦截）
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Vue 3、Vue Router、Element Plus、Vite、Axios |
-| 后端 | FastAPI、Uvicorn、Pydantic Settings |
-| LLM / Embedding | 阿里通义 DashScope（OpenAI 兼容接口） |
-| 向量库 | Qdrant（按租户独立 Collection，dense + sparse） |
-| 文档解析 | pypdf、python-docx、jieba 等 |
-| 基础设施（可选） | MySQL、Redis、Docker Compose |
-
-## 目录结构
-
-```
-rag-multi-platform/
-├── backend/                 # FastAPI 后端
-│   ├── api/                 # HTTP 路由
-│   ├── chat/                # SSE 流式问答、RAG 上下文
-│   ├── config/              # 配置与常量
-│   ├── core/                # LLM/Embedding 工厂、稀疏编码、安全
-│   ├── document/            # 文档加载、清洗、分块、入库流水线
-│   ├── file_mgr/            # 文件上传、存储、删除
-│   ├── retrieval/           # 混合检索
-│   ├── storage/             # Qdrant、Redis、MySQL 封装
-│   ├── tests/               # 单元测试
-│   ├── .env.example         # 环境变量模板
-│   └── docker-compose.yml   # 基础设施编排
-├── frontend/                # Vue 3 前端
-│   ├── src/
-│   │   ├── views/           # 对话页、文件管理页
-│   │   ├── components/      # 导航、侧边栏、聊天面板
-│   │   ├── composables/     # useChat、useFileList
-│   │   └── api/             # 后端 API 封装
-│   └── vite.config.js       # 开发代理 /api → 8000
-└── README.md
-```
+| 前端 | Vue 3、Vue Router、Element Plus、Vite 6、Axios |
+| 后端 | FastAPI、Uvicorn、Pydantic Settings、Celery |
+| LLM / Embedding / Rerank | 阿里通义 DashScope |
+| 向量库 | Qdrant（单 collection，dense + sparse） |
+| 持久化 | MySQL（用户、文件、会话、标签、审计） |
+| Agent | LangGraph |
+| 文档解析 | pypdf、python-docx、jieba、PIL 等 |
+| 基础设施 | Redis（Celery）、Docker Compose |
 
 ## 环境要求
 
 - **Python** 3.11+
-- **Node.js** 18+（前端）
-- **Qdrant**（上传与 RAG 必需，默认 `localhost:6333`）
-- **DashScope API Key**（对话与向量化必需）
-
-MySQL / Redis 当前核心流程可不启动；Celery 异步任务仍为占位。
+- **Node.js** 18.20+ 或 **20 LTS**（Vite 6 需要；推荐 20 LTS）
+- **MySQL** 8.0+（默认库名 `rag_multi_platform`）
+- **Qdrant**（默认 `localhost:6333`）
+- **Redis**（Celery 异步解析与可选缓存）
+- **DashScope API Key**
 
 ## 快速开始
 
-### 1. 启动 Qdrant（推荐 Docker）
+### 1. 基础设施
 
 ```bash
 cd backend
-docker compose up -d qdrant
+docker compose up -d mysql qdrant redis
 ```
-
-或使用已有 Qdrant 服务，在 `.env` 中配置 `QDRANT_HOST` / `QDRANT_PORT`。
 
 ### 2. 后端
 
 ```bash
 cd backend
-
-# 创建并激活虚拟环境
 python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-# Linux / macOS
-# source .venv/bin/activate
-
+.venv\Scripts\activate   # Windows
 pip install -r requirements.txt
+copy .env.example .env   # 填写 DASHSCOPE_API_KEY
 
-# 复制并编辑环境变量（至少填写 DASHSCOPE_API_KEY）
-copy .env.example .env   # Windows
-# cp .env.example .env   # Linux / macOS
-
-# 启动 API 服务
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-验证：
+### 3. Celery Worker（大文件异步解析）
 
-- 健康检查：<http://localhost:8000/health>
-- API 文档：<http://localhost:8000/docs>
+```bash
+cd backend
+celery -A tasks.celery_app worker --loglevel=info
+```
 
-### 3. 前端
+或使用 Docker Compose 中的 `celery-worker` 服务。
+
+### 4. 前端
 
 ```bash
 cd frontend
@@ -110,78 +87,87 @@ npm install
 npm run dev
 ```
 
-浏览器访问：<http://localhost:5000>
+访问：<http://localhost:5000>
 
-Vite 已将 `/api` 代理到 `http://127.0.0.1:8000`。若后端部署在远程服务器，需修改 [`frontend/vite.config.js`](frontend/vite.config.js) 中的 `proxy.target`。
-
-### 4. Docker Compose（完整基础设施）
-
-在 `backend/` 目录下可一键启动 MySQL、Redis、Qdrant 及后端容器：
-
-```bash
-cd backend
-docker compose up -d
-```
-
-## 环境变量说明（后端）
-
-复制 [`backend/.env.example`](backend/.env.example) 为 `backend/.env`，重点配置：
+## 环境变量（重点）
 
 | 变量 | 说明 |
 |------|------|
-| `DASHSCOPE_API_KEY` | 通义 API 密钥（LLM + Embedding） |
-| `QDRANT_HOST` / `QDRANT_PORT` | Qdrant 地址（host 不要带 `http://`） |
-| `AUTH_SKIP` | 开发环境设为 `true` 跳过 JWT |
-| `CORS_ORIGINS` | 允许的前端源，需包含 `http://localhost:5000` |
-| `CHUNK_SIZE` / `CHUNK_OVERLAP` | 文档分块参数 |
-| `UPLOAD_DIR` | 上传文件本地目录，默认 `tmp/uploads` |
+| `DASHSCOPE_API_KEY` | 通义 API 密钥 |
+| `CHUNK_STRATEGY` | `fixed`（默认）或 `semantic` |
+| `ASYNC_UPLOAD_THRESHOLD_MB` | 超过此大小走 Celery，默认 5 |
+| `CELERY_BROKER_URL` | Redis broker |
+| `AUTH_SKIP` | 开发环境跳过 JWT |
 
 ## 核心数据流
 
-**文档入库：** 上传 → 本地磁盘 → 解析/清洗/分块 → 通义 Embedding + 稀疏向量 → Qdrant
+**文档入库：** 上传 → 本地磁盘 + MySQL → 解析/分块 → Embedding + 稀疏向量 → Qdrant → 自动打标 → 同步 `tag_ids` 到 Qdrant
 
-**RAG 问答：** 用户提问（选中知识库）→ 混合检索 Qdrant → 检索片段注入 Prompt → 通义 LLM SSE 流式回答
+**RAG 问答：** 提问（可选 `collection` + `tag_ids`）→ 混合检索 → Rerank → Prompt 注入 → SSE 流式回答 → 消息落库
 
-关键文件：
-
-- 入库流水线：[`backend/document/pipeline.py`](backend/document/pipeline.py)
-- 向量化：[`backend/core/llm_factory.py`](backend/core/llm_factory.py)、[`backend/core/sparse_encoder.py`](backend/core/sparse_encoder.py)
-- 向量库：[`backend/storage/vector_store.py`](backend/storage/vector_store.py)
-- 混合检索：[`backend/retrieval/hybrid_search.py`](backend/retrieval/hybrid_search.py)
-- RAG 对话：[`backend/chat/rag_service.py`](backend/chat/rag_service.py)
+**会话：** 前端调用 Session API → MySQL 持久化；旧版 localStorage 数据可通过 `/api/sessions/import` 一次性迁移
 
 ## 主要 API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/models` | LLM 模型列表 |
-| GET | `/api/collections` | 知识库（已索引文件）列表 |
-| GET | `/api/files` | 文件管理列表（支持 keyword 搜索） |
-| POST | `/api/upload` | 上传并索引文档 |
+| POST | `/api/auth/login` | 登录 |
+| POST | `/api/auth/register` | 注册 |
+| PUT | `/api/users/me` | 更新个人信息 |
+| GET/POST/PUT/DELETE | `/api/sessions` | 会话 CRUD |
+| POST | `/api/sessions/{id}/archive` | 归档会话 |
+| POST | `/api/sessions/import` | 批量导入 localStorage 会话 |
+| GET | `/api/sessions/{id}/history` | 会话历史 |
+| POST | `/api/chat/stream` | SSE 流式问答（支持 `collection`、`tag_ids`） |
+| POST | `/api/chat/agent` | LangGraph Agent 问答（JSON） |
+| POST | `/api/chat/agent/stream` | LangGraph Agent 流式问答（SSE） |
+| GET/POST | `/api/tag-categories` | 标签分类 |
+| GET | `/api/files/with-tags` | 带标签文件列表 |
+| PUT | `/api/files/{id}/tags` | 手动打标 |
+| POST | `/api/files/tags/rerun` | 重跑自动标签 |
+| POST | `/api/folders` | 创建文件夹 |
+| GET | `/api/folders` | 文件夹树 |
+| PUT | `/api/folders/{id}` | 重命名文件夹 |
+| PUT | `/api/folders/{id}/move` | 移动文件夹 |
+| DELETE | `/api/folders/{id}` | 删除空文件夹 |
+| PUT | `/api/files/{id}/move` | 移动文件到文件夹 |
+| GET | `/api/files/{id}/preview` | 文件预览 |
+| GET | `/api/audit/operations` | 操作审计 |
+| GET | `/api/audit/chats` | 问答审计 |
+| POST | `/api/upload` | 上传并索引 |
 | DELETE | `/api/files/{file_id}` | 删除文件及向量 |
-| POST | `/api/chat/stream` | SSE 流式问答（带 `collection` 时走 RAG） |
-| POST | `/api/history/clear` | 清空当前会话历史（前端 localStorage 为主） |
+
+## 标签回填（已有索引）
+
+```bash
+cd backend
+python scripts/backfill_tag_payload.py
+```
 
 ## 测试
 
 ```bash
 cd backend
-.venv\Scripts\pytest tests/ -v
+pytest tests/ -v
 ```
 
 ## 常见问题
 
-**Qdrant 连接失败 / 上传报 502**  
-确认 Qdrant 已启动且 `QDRANT_HOST`、`QDRANT_PORT` 正确。云服务器上 host 用 IP 或 `127.0.0.1`，不要写成 `http://...`。
+**Rollup 原生模块缺失（Windows）**  
+删除 `frontend/node_modules` 与 `package-lock.json` 后重新 `npm install`；Node 升级到 18.20+ 或 20 LTS。
 
-**缺少 jieba 模块**  
-在 backend 虚拟环境中执行：`pip install -r requirements.txt`
+**MySQL 旧库缺列**  
+重启后端触发 `ensure_schema()`；或使用 `alembic upgrade head` 执行迁移。库名使用 `rag_multi_platform`。
 
-**浏览器无法打开 `http://0.0.0.0:8000`**  
-`0.0.0.0` 是监听地址，访问时请用 `http://127.0.0.1:8000` 或服务器公网 IP。
+**数据库迁移（Alembic）**
 
-**旧版 Qdrant 数据不兼容**  
-升级双向量 schema 后，需删除旧 collection（如 `tenant_dev-tenant`）并重新上传文档。
+```bash
+cd backend
+pip install alembic   # 已含于 requirements.txt
+alembic upgrade head  # 应用 002_department 等迁移
+```
+
+已有通过 `create_all()` 建库的部署，可先 `alembic stamp 001_baseline` 再 `alembic upgrade head`。
 
 ## License
 

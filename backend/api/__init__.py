@@ -3,13 +3,13 @@
 from api.audit_api import router as audit_router
 from api.chat_api import router as chat_router
 from api.file_api import router as file_router
-from api.tenant_api import router as tenant_router
+from api.tag_api import router as tag_router
 from api.user_api import router as user_router
 
 __all__ = [
     "audit_router",
     "chat_router",
     "file_router",
-    "tenant_router",
+    "tag_router",
     "user_router",
 ]

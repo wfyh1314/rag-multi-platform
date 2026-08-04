@@ -8,9 +8,11 @@ from core.reducers import DocumentsReducer, MessagesReducer
 class RAGState(TypedDict, total=False):
     """RAG 问答工作流的 LangGraph 状态。"""
 
-    tenant_id: str
     session_id: str
     query: str
+    user: dict[str, Any]
+    file_id: str
+    tag_ids: list[str]
     messages: MessagesReducer
     documents: DocumentsReducer
     answer: str

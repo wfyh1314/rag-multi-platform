@@ -14,8 +14,8 @@ class UserRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def get_by_username(self, tenant_id: str, username: str) -> Optional[User]:
-        stmt = select(User).where(User.tenant_id == tenant_id, User.username == username)
+    def get_by_username(self, username: str) -> Optional[User]:
+        stmt = select(User).where(User.username == username)
         return self.session.scalars(stmt).first()
 
     def get_by_id(self, user_id: str) -> Optional[User]:

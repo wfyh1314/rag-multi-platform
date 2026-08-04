@@ -16,17 +16,15 @@ class HybridSearch:
 
     def __init__(
         self,
-        tenant_id: str,
         vector_store: Optional[VectorStore] = None,
         sparse_encoder: Optional[SparseEncoder] = None,
     ):
-        self.tenant_id = tenant_id
         settings = get_settings()
-        self._vector_store = vector_store or VectorStore(tenant_id, settings)
+        self._vector_store = vector_store or VectorStore(settings)
         self._sparse_encoder = sparse_encoder or SparseEncoder()
         self._embedding = get_embedding()
-        self.dense = BaseRetriever(tenant_id, self._vector_store)
-        self.sparse = BM25Retriever(tenant_id, self._vector_store, self._sparse_encoder)
+        self.dense = BaseRetriever(self._vector_store)
+        self.sparse = BM25Retriever(self._vector_store, self._sparse_encoder)
 
     def search(
         self,

@@ -1,4 +1,4 @@
-"""MySQL ORM 封装：租户、用户、文件、会话、审计表 CRUD."""
+"""MySQL ORM 封装：用户、文件、会话、审计表 CRUD."""
 
 from contextlib import contextmanager
 from typing import Any, Generator, Optional
@@ -32,6 +32,14 @@ def create_tables() -> None:
     import storage.models  # noqa: F401
 
     Base.metadata.create_all(bind=_engine)
+
+
+def get_engine():
+    """返回当前 SQLAlchemy 引擎。"""
+    global _engine
+    if _engine is None:
+        init_db()
+    return _engine
 
 
 @contextmanager

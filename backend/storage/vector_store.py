@@ -1,4 +1,4 @@
-"""Qdrant 封装：按租户创建独立集合、稠密+稀疏向量增删改查、混合检索."""
+"""Qdrant 封装：全局 knowledge_base 集合、稠密+稀疏向量增删改查、混合检索."""
 
 import uuid
 from typing import Any, Optional
@@ -31,12 +31,11 @@ from core.exceptions import AppError
 
 
 class VectorStore:
-    """Qdrant 向量存储，按租户隔离集合，支持 dense + sparse 混合检索。"""
+    """Qdrant 向量存储，单 collection，支持 dense + sparse 混合检索。"""
 
-    def __init__(self, tenant_id: str, settings: Optional[Settings] = None):
-        self.tenant_id = tenant_id
+    def __init__(self, settings: Optional[Settings] = None):
         cfg = settings or get_settings()
-        self.collection_name = f"{cfg.qdrant_collection_prefix}{tenant_id}"
+        self.collection_name = cfg.qdrant_collection_name
         self._client = QdrantClient(
             host=cfg.qdrant_host,
             port=cfg.qdrant_port,
@@ -162,6 +161,20 @@ class VectorStore:
         )
         return [self._hit_to_dict(hit) for hit in response.points]
 
+    def set_payload_by_filter(self, filters: dict[str, Any], payload: dict[str, Any]) -> None:
+        """按 payload 条件批量更新向量点 metadata。"""
+        if not filters or not payload:
+            return
+        collections = [c.name for c in self._client.get_collections().collections]
+        if self.collection_name not in collections:
+            return
+        self._client.set_payload(
+            collection_name=self.collection_name,
+            payload=payload,
+            points=FilterSelector(filter=self._build_filter(filters)),
+            wait=True,
+        )
+
     def delete(self, point_ids: list[str]) -> None:
         """按 ID 删除向量。"""
         if not point_ids:
@@ -216,11 +229,40 @@ class VectorStore:
         }
 
     def _build_filter(self, filters: dict[str, Any]) -> Filter:
-        conditions = [
-            FieldCondition(key=key, match=MatchValue(value=value))
-            for key, value in filters.items()
-        ]
-        return Filter(must=conditions)
+        if filters.get("_should"):
+            should_groups = filters["_should"]
+            should_filters = [self._build_filter(group) for group in should_groups]
+            return Filter(should=should_filters)
+
+        must_conditions: list[Any] = []
+        for key, value in filters.items():
+            if key.startswith("_"):
+                continue
+            if key == "tag_ids":
+                must_conditions.append(self._build_tag_filter(value))
+            else:
+                must_conditions.append(
+                    FieldCondition(key=key, match=MatchValue(value=value))
+                )
+        if len(must_conditions) == 1:
+            inner = must_conditions[0]
+            if isinstance(inner, Filter):
+                return inner
+        return Filter(must=must_conditions)
+
+    @staticmethod
+    def _build_tag_filter(tag_ids: Any) -> Filter | FieldCondition:
+        """构建 tag_ids 过滤：支持单值或 OR 多值。"""
+        if isinstance(tag_ids, list):
+            if len(tag_ids) == 1:
+                return FieldCondition(key="tag_ids", match=MatchValue(value=tag_ids[0]))
+            return Filter(
+                should=[
+                    FieldCondition(key="tag_ids", match=MatchValue(value=tag_id))
+                    for tag_id in tag_ids
+                ]
+            )
+        return FieldCondition(key="tag_ids", match=MatchValue(value=tag_ids))
 
     @staticmethod
     def _to_point_id(point_id: str) -> str:

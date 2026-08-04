@@ -186,7 +186,11 @@ onMounted(async () => {
       <aside class="folder-sidebar page-card">
         <div class="folder-sidebar-header">
           <h2 class="page-card-title">文件夹</h2>
-          <el-button size="small" :loading="folderLoading" @click="loadFolders">刷新</el-button>
+        </div>
+        <div class="folder-sidebar-actions">
+          <el-button class="folder-create-btn" type="primary" @click="handleCreate(selectedFolderId || null)">
+            新建文件夹
+          </el-button>
         </div>
         <div class="folder-quick-nav">
           <el-button
@@ -204,36 +208,33 @@ onMounted(async () => {
             根目录
           </el-button>
         </div>
-        <el-tree
-          v-loading="folderLoading"
-          :data="folders"
-          node-key="id"
-          :props="{ label: 'name', children: 'children' }"
-          highlight-current
-          default-expand-all
-        >
-          <template #default="{ data }">
-            <div class="folder-tree-row">
-              <span class="folder-tree-node" @click="onFolderNodeClick(data)">
-                <el-icon><FolderOpened /></el-icon>
-                <span>{{ data.name }}</span>
-              </span>
-              <el-dropdown trigger="click" @command="(cmd) => cmd === 'rename' ? handleRename(data) : handleDeleteFolder(data)">
-                <el-button link size="small" class="folder-tree-more" @click.stop>⋯</el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
-                    <el-dropdown-item command="delete">删除</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-          </template>
-        </el-tree>
-        <div class="folder-sidebar-actions">
-          <el-button size="small" type="primary" @click="handleCreate(selectedFolderId || null)">
-            新建文件夹
-          </el-button>
+        <div class="folder-tree-scroll">
+          <el-tree
+            v-loading="folderLoading"
+            :data="folders"
+            node-key="id"
+            :props="{ label: 'name', children: 'children' }"
+            highlight-current
+            default-expand-all
+          >
+            <template #default="{ data }">
+              <div class="folder-tree-row">
+                <span class="folder-tree-node" @click="onFolderNodeClick(data)">
+                  <el-icon><FolderOpened /></el-icon>
+                  <span>{{ data.name }}</span>
+                </span>
+                <el-dropdown trigger="click" @command="(cmd) => cmd === 'rename' ? handleRename(data) : handleDeleteFolder(data)">
+                  <el-button link size="small" class="folder-tree-more" @click.stop>⋯</el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                      <el-dropdown-item command="delete">删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </template>
+          </el-tree>
         </div>
       </aside>
 
@@ -302,7 +303,6 @@ onMounted(async () => {
         <section class="page-card file-list-card">
           <div class="file-list-card-header">
             <h2 class="page-card-title">已导入文档 · {{ currentFolderLabel }}</h2>
-            <el-button :loading="loading" @click="loadFiles">刷新</el-button>
           </div>
 
           <div class="filter-bar">

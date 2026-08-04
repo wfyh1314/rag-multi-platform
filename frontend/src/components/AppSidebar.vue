@@ -25,7 +25,6 @@ onMounted(() => {
       <div class="app-sidebar-logo">RAG</div>
       <div class="app-sidebar-brand-text">
         <span class="app-sidebar-title">企业级知识库问答平台</span>
-        <span class="app-sidebar-badge">AI生成</span>
       </div>
     </div>
 

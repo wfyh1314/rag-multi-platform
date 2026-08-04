@@ -1,16 +1,14 @@
 <script setup>
 import { ref, nextTick, watch } from 'vue'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 const props = defineProps({
   messages: { type: Array, required: true },
-  models: { type: Array, required: true },
-  selectedModel: { type: String, required: true },
   isStreaming: { type: Boolean, default: false },
-  sessionTitle: { type: String, default: '新对话' },
 })
 
-const emit = defineEmits(['send', 'update:selectedModel'])
+const emit = defineEmits(['send'])
 
 const inputText = ref('')
 const messagesEl = ref(null)
@@ -19,7 +17,8 @@ marked.setOptions({ breaks: true })
 
 function renderMarkdown(text) {
   if (!text) return ''
-  return marked.parse(text)
+  const rawHtml = marked.parse(text)
+  return DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } })
 }
 
 function copyText(text) {
@@ -51,26 +50,6 @@ watch(() => props.messages, scrollToBottom, { deep: true })
 
 <template>
   <main class="chat-container">
-    <header class="chat-header">
-      <div class="header-left">
-        <h1>基于知识库的智能问答 </h1>
-        <!-- <p class="session-name">基于知识库的智能问答</p> -->
-      </div>
-      <div class="control-group model-select-group">
-        <label for="model-select">LLM Model</label>
-        <select
-          id="model-select"
-          class="select-box"
-          :value="selectedModel"
-          @change="emit('update:selectedModel', $event.target.value)"
-        >
-          <option v-for="model in models" :key="model.id" :value="model.id">
-            {{ model.name }}
-          </option>
-        </select>
-      </div>
-    </header>
-
     <div ref="messagesEl" class="chat-messages">
       <div v-if="!messages.length" class="empty-state">
         <div class="empty-state-icon">💬</div>
@@ -99,6 +78,19 @@ watch(() => props.messages, scrollToBottom, { deep: true })
           >
             📋
           </button>
+          <div
+            v-if="msg.role === 'assistant' && msg.sources?.length"
+            class="message-sources"
+          >
+            <p class="sources-title">引用来源（{{ msg.sources.length }}）</p>
+            <ul class="sources-list">
+              <li v-for="(src, idx) in msg.sources" :key="idx">
+                <span class="source-index">[{{ idx + 1 }}]</span>
+                <span v-if="src.metadata?.modality === 'image'" class="source-modality">[图片]</span>
+                {{ (src.content || '').slice(0, 120) }}{{ (src.content || '').length > 120 ? '…' : '' }}
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 

@@ -1,40 +1,54 @@
 <script setup>
-import { ref } from 'vue'
+import { computed } from 'vue'
+import { normalizeCollection } from '@/views/chat/composables/useChat'
 
-defineProps({
+const props = defineProps({
+  models: { type: Array, required: true },
+  selectedModel: { type: String, required: true },
   collections: { type: Array, required: true },
   pendingCollections: { type: Array, default: () => [] },
   selectedCollection: { type: String, required: true },
+  tagCategories: { type: Array, default: () => [] },
+  selectedTagIds: { type: Array, default: () => [] },
+  chatMode: { type: String, default: 'stream' },
   maxLength: { type: Number, required: true },
   temperature: { type: Number, required: true },
-  uploadStatus: { type: String, default: '' },
 })
 
 const emit = defineEmits([
+  'update:selectedModel',
   'update:selectedCollection',
+  'update:selectedTagIds',
+  'update:chatMode',
   'update:maxLength',
   'update:temperature',
   'clear',
-  'upload',
 ])
 
-const isDragging = ref(false)
-const fileInput = ref(null)
+const flatTags = computed(() => {
+  const items = []
+  for (const cat of props.tagCategories) {
+    for (const tag of cat.tags || []) {
+      items.push({
+        id: tag.id,
+        label: `${cat.name}: ${tag.name}`,
+      })
+    }
+  }
+  return items
+})
 
-function onFileChange(e) {
-  const file = e.target.files?.[0]
-  if (file) emit('upload', file)
-  e.target.value = ''
+function formatCollectionLabel(item) {
+  const normalized = normalizeCollection(item)
+  let scope = '私有'
+  if (normalized.visibility === 'public') scope = '公共'
+  else if (normalized.visibility === 'department') scope = '部门'
+  return `${normalized.filename}（${scope}）`
 }
 
-function onDrop(e) {
-  isDragging.value = false
-  const file = e.dataTransfer.files?.[0]
-  if (file) emit('upload', file)
-}
-
-function openFilePicker() {
-  fileInput.value?.click()
+function onTagChange(event) {
+  const values = Array.from(event.target.selectedOptions).map((opt) => opt.value)
+  emit('update:selectedTagIds', values)
 }
 </script>
 
@@ -45,6 +59,32 @@ function openFilePicker() {
     </div>
 
     <div class="info-content">
+      <div class="info-section">
+        <h3>问答模式</h3>
+        <select
+          class="select-box select-full"
+          :value="chatMode"
+          @change="emit('update:chatMode', $event.target.value)"
+        >
+          <option value="stream">流式 RAG（SSE）</option>
+          <option value="agent">Agent（LangGraph 流式）</option>
+        </select>
+        <p class="tag-filter-hint">Agent 模式流式返回答案与引用来源</p>
+      </div>
+
+      <div class="info-section">
+        <h3>LLM Model</h3>
+        <select
+          class="select-box select-full"
+          :value="selectedModel"
+          @change="emit('update:selectedModel', $event.target.value)"
+        >
+          <option v-for="model in models" :key="model.id" :value="model.id">
+            {{ model.name }}
+          </option>
+        </select>
+      </div>
+
       <div class="info-section">
         <h3>模型回复最大长度</h3>
         <div class="slider-row">
@@ -105,8 +145,12 @@ function openFilePicker() {
           @change="emit('update:selectedCollection', $event.target.value)"
         >
           <option value="">不使用知识库</option>
-          <option v-for="name in collections" :key="name" :value="name">
-            {{ name }}
+          <option
+            v-for="item in collections"
+            :key="item.file_id"
+            :value="item.file_id"
+          >
+            {{ formatCollectionLabel(item) }}
           </option>
           <option
             v-for="name in pendingCollections"
@@ -120,27 +164,18 @@ function openFilePicker() {
       </div>
 
       <div class="info-section">
-        <h3>上传文件</h3>
-        <input
-          ref="fileInput"
-          type="file"
-          class="hidden-input"
-          accept=".csv,.txt,.doc,.docx,.pdf,.md"
-          @change="onFileChange"
-        />
-        <div
-          class="upload-zone"
-          :class="{ dragging: isDragging }"
-          @click="openFilePicker"
-          @dragover.prevent="isDragging = true"
-          @dragleave.prevent="isDragging = false"
-          @drop.prevent="onDrop"
+        <h3>标签筛选</h3>
+        <select
+          class="select-box select-full tag-filter-select"
+          multiple
+          :value="selectedTagIds"
+          @change="onTagChange($event)"
         >
-          <div class="upload-icon">⬆</div>
-          <p>将文件拖放到此处</p>
-          <p class="upload-hint">- 或 - 点击上传</p>
-        </div>
-        <p v-if="uploadStatus" class="upload-status">{{ uploadStatus }}</p>
+          <option v-for="tag in flatTags" :key="tag.id" :value="tag.id">
+            {{ tag.label }}
+          </option>
+        </select>
+        <p class="tag-filter-hint">按住 Ctrl 多选；不选则不过滤标签</p>
       </div>
     </div>
   </aside>

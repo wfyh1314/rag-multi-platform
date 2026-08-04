@@ -12,11 +12,10 @@ const loading = ref(false)
 const form = reactive({
   username: 'admin',
   password: 'admin@123',
-  tenant_id: window.defaultTenantId || 'default',
 })
 
 async function handleSubmit() {
-  if (!form.username || !form.password || !form.tenant_id) {
+  if (!form.username || !form.password) {
     ElMessage.warning('请填写完整登录信息')
     return
   }
@@ -26,7 +25,6 @@ async function handleSubmit() {
     await login({
       username: form.username,
       password: form.password,
-      tenant_id: form.tenant_id,
     })
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     router.replace(redirect || '/')
@@ -58,12 +56,13 @@ async function handleSubmit() {
             @keyup.enter="handleSubmit"
           />
         </el-form-item>
-        <el-form-item label="租户 ID">
-          <el-input v-model="form.tenant_id" placeholder="请输入租户 ID" />
-        </el-form-item>
         <el-button type="primary" class="login-btn" :loading="loading" @click="handleSubmit">
           登录
         </el-button>
+        <p class="login-link-row">
+          没有账号？
+          <router-link to="/register">立即注册</router-link>
+        </p>
       </el-form>
     </div>
   </div>
@@ -103,5 +102,12 @@ async function handleSubmit() {
 .login-btn {
   width: 100%;
   margin-top: 8px;
+}
+
+.login-link-row {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
 }
 </style>

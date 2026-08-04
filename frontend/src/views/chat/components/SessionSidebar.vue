@@ -2,9 +2,16 @@
 defineProps({
   sessions: { type: Array, required: true },
   activeSessionId: { type: String, required: true },
+  showArchived: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['new-session', 'switch-session', 'delete-session'])
+const emit = defineEmits([
+  'new-session',
+  'switch-session',
+  'delete-session',
+  'archive-session',
+  'toggle-archived',
+])
 </script>
 
 <template>
@@ -17,8 +24,14 @@ const emit = defineEmits(['new-session', 'switch-session', 'delete-session'])
       + 新建对话
     </button>
 
+    <div class="session-toolbar">
+      <el-button link size="small" @click="emit('toggle-archived')">
+        {{ showArchived ? '隐藏归档' : '显示归档' }}
+      </el-button>
+    </div>
+
     <div class="session-section">
-      <h3>对话列表</h3>
+      <h3>{{ showArchived ? '已归档对话' : '对话列表' }}</h3>
       <div class="session-list">
         <div
           v-for="session in sessions"
@@ -32,6 +45,15 @@ const emit = defineEmits(['new-session', 'switch-session', 'delete-session'])
             @click="emit('switch-session', session.id)"
           >
             <span class="session-title">{{ session.title }}</span>
+            <span v-if="session.isArchived" class="session-archived-tag">归档</span>
+          </button>
+          <button
+            v-if="!showArchived"
+            class="btn btn-icon"
+            title="归档对话"
+            @click.stop="emit('archive-session', session.id)"
+          >
+            📦
           </button>
           <button
             class="btn btn-icon"

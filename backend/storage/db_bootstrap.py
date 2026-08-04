@@ -9,6 +9,7 @@ from config.constants import DOC_VISIBILITY_PRIVATE, ROLE_SUPER_ADMIN
 from config.settings import Settings, get_settings
 from core.security import hash_password
 from storage.mysql_db import create_tables, get_db_session, get_engine, init_db
+from storage.legacy_tenant_migration import migrate_legacy_tenant_schema
 from storage.repositories.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)
@@ -51,13 +52,13 @@ def ensure_schema() -> None:
             if name not in existing:
                 pending.append((table_name, name, sql))
 
-    if not pending:
-        return
+    if pending:
+        with engine.begin() as conn:
+            for table_name, name, sql in pending:
+                conn.execute(text(sql))
+                logger.info("Added missing column %s.%s", table_name, name)
 
-    with engine.begin() as conn:
-        for table_name, name, sql in pending:
-            conn.execute(text(sql))
-            logger.info("Added missing column %s.%s", table_name, name)
+    migrate_legacy_tenant_schema(engine)
 
 
 def seed_default_data(settings: Settings | None = None) -> None:

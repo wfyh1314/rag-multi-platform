@@ -62,12 +62,12 @@ const collectionOptions = computed(() => {
       label: `${normalized.filename}（${scope}）`,
     }
   })
-  return [{ value: '', label: '不使用知识库' }, ...items]
+  return [{ value: '', label: '全部知识库（自动检索）' }, ...items]
 })
 
 const permissionScopeText = computed(() => {
   if (!props.selectedCollection) {
-    return '未选择知识库，将使用全库可访问文档或纯 LLM 模式'
+    return '将自动检索您有权限访问的全部知识库'
   }
   const item = props.collections.find(
     (c) => normalizeCollection(c).file_id === props.selectedCollection,
@@ -177,6 +177,7 @@ const permissionScopeText = computed(() => {
           <el-select
             :model-value="selectedCollection"
             placeholder="选择知识库"
+            :clearable="false"
             @update:model-value="emit('update:selectedCollection', $event)"
           >
             <el-option

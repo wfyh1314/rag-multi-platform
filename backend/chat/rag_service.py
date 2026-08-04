@@ -42,7 +42,11 @@ def _build_search_filters(
         get_accessible_file_record(user, file_id)
         return {"file_id": file_id}
 
-    return None
+    if not accessible_ids:
+        return None
+    if len(accessible_ids) == 1:
+        return {"file_id": next(iter(accessible_ids))}
+    return {"_should": [{"file_id": fid} for fid in sorted(accessible_ids)]}
 
 
 def _format_hit_content(hit: dict[str, Any], index: int) -> str:
@@ -70,6 +74,8 @@ def search_rag_hits(
     """多模态混合检索 + Rerank，返回命中列表。"""
     search_filters = _build_search_filters(user, file_id, tag_ids)
     if tag_ids and search_filters is None:
+        return []
+    if not file_id and not tag_ids and search_filters is None:
         return []
 
     return MultimodalRetrieval().search(

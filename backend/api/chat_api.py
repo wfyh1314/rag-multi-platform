@@ -19,7 +19,7 @@ from audit.chat_audit_service import ChatAuditService
 from audit.content_risk import ContentRiskService
 from chat.history_service import HistoryService
 from chat.session_service import SessionService
-from chat.sse_stream import format_sse_event, stream_agent_answer, stream_llm_answer, stream_rag_answer
+from chat.sse_stream import format_sse_event, stream_agent_answer, stream_rag_answer
 from core.logger import get_logger
 from core.response import success
 from core.security import get_current_user
@@ -147,17 +147,14 @@ async def chat_stream(
                 user_id,
             )
 
-    if body.collection or body.tag_ids:
-        inner = stream_rag_answer(
-            body.query,
-            user=current_user,
-            file_id=body.collection,
-            tag_ids=body.tag_ids,
-            history=body.history,
-            **stream_kwargs,
-        )
-    else:
-        inner = stream_llm_answer(body.query, history=body.history, **stream_kwargs)
+    inner = stream_rag_answer(
+        body.query,
+        user=current_user,
+        file_id=body.collection,
+        tag_ids=body.tag_ids,
+        history=body.history,
+        **stream_kwargs,
+    )
 
     stream_fn = _persist_stream(
         inner,
